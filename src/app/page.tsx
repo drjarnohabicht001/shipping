@@ -3,7 +3,9 @@ import Hero from "./components/Hero";
 import MainAboutPage from "./components/MainAbout";
 import MainServices from "./components/MainServices";
 import MainTransportType from "./components/MainTransportType";
+import Testimonials from "./components/Testimonials";
 import WhyChooseUs from "./components/WhyChooseUS";
+
 
 
 export default function Home() {
@@ -15,6 +17,7 @@ export default function Home() {
      <MainTransportType />
      <WhyChooseUs />
      <Extra />
+     <Testimonials />
     </>
 
   );
