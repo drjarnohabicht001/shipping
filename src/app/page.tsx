@@ -5,6 +5,7 @@ import MainServices from "./components/MainServices";
 import MainTransportType from "./components/MainTransportType";
 import Testimonials from "./components/Testimonials";
 import WhyChooseUs from "./components/WhyChooseUS";
+import Faq from "./components//Faq";
 
 
 
@@ -18,6 +19,7 @@ export default function Home() {
      <WhyChooseUs />
      <Extra />
      <Testimonials />
+     <Faq />
     </>
 
   );

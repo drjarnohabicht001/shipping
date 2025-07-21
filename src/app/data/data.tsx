@@ -47,3 +47,28 @@ export const testimonials = [
     rating: 5
   }
 ];
+
+
+
+export const faqs = [
+  {
+    question: "What types of cargo do you handle?",
+    answer: "We handle a wide range of cargo, including general freight, oversized equipment, perishable goods, hazardous materials, and time-sensitive deliveries. Contact us for custom logistics solutions tailored to your shipment."
+  },
+  {
+    question: "Do you provide international shipping services?",
+    answer: "Yes, we offer reliable international shipping services to destinations worldwide. Whether it’s air, sea, or land freight, we ensure secure and timely delivery with full documentation support."
+  },
+  {
+    question: "How can I get a quote for my shipment?",
+    answer: "You can request a quote by filling out the form on our website or contacting our customer service team. Just provide shipment details such as origin, destination, weight, and dimensions, and we’ll get back to you with a customized quote."
+  },
+  {
+    question: "Can I track my shipment in real time?",
+    answer: "Absolutely. We provide real-time shipment tracking through our online portal. You’ll receive a tracking number once your shipment is dispatched, allowing you to monitor its status at every stage."
+  },
+  {
+    question: "Do you offer customs clearance services?",
+    answer: "Yes, we provide comprehensive customs clearance services to ensure smooth and hassle-free import and export. Our experienced team handles all necessary documentation and compliance requirements."
+  }
+];
