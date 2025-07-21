@@ -1,7 +1,10 @@
+import Extra from "./components/Extra";
 import Hero from "./components/Hero";
 import MainAboutPage from "./components/MainAbout";
 import MainServices from "./components/MainServices";
 import MainTransportType from "./components/MainTransportType";
+import WhyChooseUs from "./components/WhyChooseUS";
+
 
 export default function Home() {
   return (
@@ -10,6 +13,8 @@ export default function Home() {
      <MainAboutPage />
      <MainServices />
      <MainTransportType />
+     <WhyChooseUs />
+     <Extra />
     </>
 
   );
