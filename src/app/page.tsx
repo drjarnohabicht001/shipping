@@ -6,6 +6,7 @@ import MainTransportType from "./components/MainTransportType";
 import Testimonials from "./components/Testimonials";
 import WhyChooseUs from "./components/WhyChooseUS";
 import Faq from "./components//Faq";
+import ServiceSection from "./components/MainContact";
 
 
 
@@ -20,6 +21,7 @@ export default function Home() {
      <Extra />
      <Testimonials />
      <Faq />
+     <ServiceSection />
     </>
 
   );
