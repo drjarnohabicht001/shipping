@@ -3,7 +3,7 @@ import aboutpic from '../../../public/img/aboutpic.webp';
 
 export default function AboutUS() {
   return (
-    <section className="py-12 px-4 sm:px-6 lg:px-8 bg-gray-50">
+    <section className="py-12 px-4 sm:px-6 lg:px-8 bg-[#F2F2F2]">
       <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-12 items-center">
      
         <div className="space-y-6 order-2 md:order-1">
