@@ -1,13 +1,28 @@
+'use client';
 import { Button } from "@/Components/Button";
 import Image from "next/image";
 import contain from '../../../public/img/contain.webp';
+import contact2bg from '../../../public/img/contact2bg.webp';
+import { usePathname } from "next/navigation";
 
 export default function ServiceSection() {
+    const pathname = usePathname();
+
+
+    const backgroundImage = (() => {
+        if (pathname.startsWith("/about")) return contact2bg;
+        if (pathname.startsWith("/services")) return contain;
+        return contain;
+    })();
+
+
+
+
     return (
         <section className="relative w-full py-8 h-auto  overflow-hidden">
             <div className="absolute inset-0 z-0">
                 <Image
-                    src={contain}
+                    src={backgroundImage}
                     alt="Fleet background"
                     fill
                     style={{ objectFit: "cover" }}
