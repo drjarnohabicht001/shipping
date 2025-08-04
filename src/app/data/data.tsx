@@ -120,3 +120,86 @@ export const ourServices = [
     image: p12
   },
 ]
+
+
+
+export const services = [
+    {
+        title: "International Shipping",
+        description: "Seamless freight services across continents. We handle all the complexities so you don't have to.",
+        longDescription: "Our international shipping solutions connect your business to over 190 countries worldwide. We manage customs documentation, trade compliance, and cross-border regulations with our network of global partners. Whether you need door-to-door, port-to-port, or multimodal solutions, we optimize routes for cost and transit time.",
+        image: "/svg/international.svg",
+        benefits: [
+            "End-to-end tracking visibility",
+            "Dedicated trade lane experts",
+            "Competitive freight rates",
+            "Dangerous goods handling"
+        ],
+        photo: p7
+    },
+    {
+        title: "Domestic Delivery",
+        description: "Fast and dependable freight coverage across the country — from last-mile delivery to bulk transportation.",
+        longDescription: "From same-day courier services to heavy freight movement, our domestic network covers all transportation needs. We specialize in temperature-controlled shipments, high-value cargo, and oversized loads with specialized equipment available nationwide. Our technology platform provides real-time tracking and predictive delivery windows.",
+        image: "/svg/delivery.svg",
+        benefits: [
+            "Next-day and economy options",
+            "White glove delivery services",
+            "Real-time shipment tracking",
+            "Customized reporting"
+        ],
+        photo: p8
+    },
+    {
+        title: "Air Freight",
+        description: "Ideal for time-sensitive shipments. Priority handling and global air cargo partnerships.",
+        longDescription: "When speed matters, our air freight solutions deliver. We have priority access to cargo space with major airlines and charter capabilities for urgent shipments. Our perishables division handles temperature-sensitive goods with active monitoring throughout transit. We optimize consolidation opportunities to reduce costs without compromising speed.",
+        image: "/svg/airplane.svg",
+        benefits: [
+            "Same-day airport-to-airport",
+            "Charter flight options",
+            "Perishables specialists",
+            "Consolidation programs"
+        ],
+        photo: p9
+    },
+    {
+        title: "Sea Freight",
+        description: "Cost-effective solutions for large and heavy cargo. Full container load (FCL) and less than container load (LCL) options available.",
+        longDescription: "Ocean freight remains the most economical choice for large volume shipments. We offer specialized services including flat-rack and open-top containers for oversized cargo, reefer containers for temperature control, and breakbulk services. Our partnership with major shipping lines ensures reliable schedules and competitive pricing.",
+        image: "/svg/ship.svg",
+        benefits: [
+            "Weekly sailings to all major ports",
+            "Dedicated container options",
+            "Cargo insurance available",
+            "Transloading services"
+        ],
+        photo: p10
+    },
+    {
+        title: "Customs Clearance",
+        description: "Avoid delays and penalties — our experts manage all documentation and regulations for swift border crossings.",
+        longDescription: "Navigating customs regulations requires expertise. Our licensed customs brokers prepare all documentation including commercial invoices, certificates of origin, and harmonized tariff classifications. We stay current with trade agreements (USMCA, CPTPP, etc.) to help clients maximize duty savings and comply with ever-changing regulations.",
+        image: "/svg/sale.svg",
+        benefits: [
+            "Pre-clearance programs",
+            "Duty drawback services",
+            "Binding ruling assistance",
+            "Audit support"
+        ],
+        photo: p11
+    },
+    {
+        title: "Transport Types",
+        description: "Various modes of transport tailored to your logistics needs including road, rail, air, and sea solutions.",
+        longDescription: "We design multimodal solutions that combine the best attributes of different transport modes. Our intermodal services seamlessly transition between truck, rail, and ocean for optimal efficiency. For specialized needs, we provide access to tanker trucks, pneumatic trailers, and heavy lift equipment. Every solution is customized to your cargo characteristics and supply chain requirements.",
+        image: "/svg/delivery.svg",
+        benefits: [
+            "Mode optimization analysis",
+            "Dedicated fleet options",
+            "Cross-docking facilities",
+            "Project cargo specialists"
+        ],
+        photo: p12
+    }
+];

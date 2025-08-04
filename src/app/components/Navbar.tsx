@@ -33,7 +33,7 @@ export default function Navbar() {
   }, []);
 
   return (
-    <nav className={`fixed w-full z-50 transition-all duration-300 ${scrolled ? 'bg-[#00000055] shadow-md' : 'bg-transparent'}`}>
+    <nav className={`fixed w-full z-50 transition-all duration-300 ${scrolled ? 'bg-[#E8DACC] shadow-md' : 'bg-transparent'}`}>
       <div className="mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16">
           <div className="flex items-center">
@@ -43,17 +43,17 @@ export default function Navbar() {
           </div>
 
           {/* Desktop Navigation */}
-          <div className="hidden md:flex items-center space-x-8 mr-52 bg-[#00000033] w-max px-8 rounded-4xl">
+          <div className="hidden md:flex items-center space-x-8 mr-52 w-max px-8 rounded-4xl">
             {navItems.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
                 className={`${pathname === item.href
                   ? scrolled
-                    ? 'text-white border-b-2 border-white'
+                    ? 'text-[#FF5A24] border-b-2 border-white'
                     : 'text-white border-b-2 border-white'
                   : scrolled
-                    ? 'text-white/90 hover:text-white'
+                    ? 'text-black hover:text-white'
                     : 'text-white/90 hover:text-white'
                   } px-1 py-2 text-1xl font-medium transition-colors duration-300`}
               >
@@ -72,7 +72,7 @@ export default function Navbar() {
             <button
               onClick={() => setIsOpen(!isOpen)}
               className={`inline-flex items-center justify-center p-2 rounded-md ${scrolled
-                ? 'text-white hover:bg-[#FF5A24]/80'
+                ? 'text-black hover:bg-[#FF5A24]/80'
                 : 'text-white hover:bg-white/20'
                 } focus:outline-none transition-colors duration-300`}
               aria-expanded={isOpen}

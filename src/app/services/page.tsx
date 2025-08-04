@@ -1,13 +1,14 @@
+import ServicesPage from "../components/Services";
 
 
 
-export default function page(){
+export default function page() {
 
 
 
-    return(
-        <div>
-            hello services
-        </div>
+    return (
+        <>
+            <ServicesPage />
+        </>
     )
 }
