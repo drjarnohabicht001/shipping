@@ -1,13 +1,14 @@
 'use client';
 
 import {
+  ToastProvider as RadixToastProvider,
   ToastViewport,
   Toast,
   ToastTitle,
   ToastDescription,
   ToastClose,
 } from '@radix-ui/react-toast';
-import { ReactNode, createContext, useContext, useState } from 'react';
+import { ReactNode, createContext, useContext, useState, useCallback } from 'react';
 
 type ToastContextType = {
   toast: (message: string, title?: string) => void;
@@ -22,14 +23,14 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     title: undefined,
   });
 
-  const toast = (message: string, title?: string) => {
+  const toast = useCallback((message: string, title?: string) => {
     setToastInfo({ message, title });
     setOpen(true);
-  };
+  }, []);
 
   return (
     <ToastContext.Provider value={{ toast }}>
-      <ToastProvider >
+      <RadixToastProvider>
         {children}
         <Toast
           open={open}
@@ -50,7 +51,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           </ToastClose>
         </Toast>
         <ToastViewport className="fixed bottom-0 right-0 p-4" />
-      </ToastProvider>
+      </RadixToastProvider>
     </ToastContext.Provider>
   );
 }

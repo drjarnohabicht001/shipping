@@ -2,6 +2,7 @@ import { Button } from "@/Components/Button";
 import Image from "next/image";
 import bg from '../../../public/img/bg.webp';
 import { ChevronsRight } from 'lucide-react';
+import Link from "next/link";
 
 export default function Hero() {
     return (
@@ -38,12 +39,14 @@ export default function Hero() {
                             >
                                 GET A QUOTE
                             </Button>
+                            <Link href="/track">
                             <Button
                                 variant="outline"
                                 className="px-8 py-3 flex items-center  text-lg border-2 border-white text-white rounded-full hover:bg-white hover:text-black transition-colors duration-300"
                             >
                                 TRACK SHIPMENT <ChevronsRight />
                             </Button>
+                            </Link>
                         </div>
                     </div>
                 </div>

@@ -7,12 +7,15 @@ import Testimonials from "./components/Testimonials";
 import WhyChooseUs from "./components/WhyChooseUS";
 import Faq from "./components//Faq";
 import ServiceSection from "./components/MainContact";
+import Navbar from "./components/Navbar";
+import Footer from "./components/Footer";
 
 
 
 export default function Home() {
   return (
     <>
+     <Navbar />    
      <Hero />
      <MainAboutPage />
      <MainServices />
@@ -22,6 +25,7 @@ export default function Home() {
      <Testimonials />
      <Faq />
      <ServiceSection />
+      <Footer />
     </>
 
   );
