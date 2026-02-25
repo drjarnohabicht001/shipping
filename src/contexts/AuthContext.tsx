@@ -1,10 +1,28 @@
-'use client';
+"use client";
 
-import React, { createContext, useContext, useReducer, useEffect, useCallback, ReactNode } from 'react';
-import { User, AuthState, LoginCredentials, UserRole, hasPermission } from '@/types/auth';
-import { onAuthStateChanged } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
-import { adminUserService } from '@/services/adminUserService';
+import React, {
+  createContext,
+  useContext,
+  useReducer,
+  useEffect,
+  useCallback,
+  ReactNode,
+} from "react";
+import {
+  User,
+  AuthState,
+  LoginCredentials,
+  UserRole,
+  hasPermission,
+} from "@/types/auth";
+import {
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  signOut,
+} from "firebase/auth";
+import { auth } from "@/lib/firebase";
+import { adminUserService } from "@/services/adminUserService";
+import { FirestoreAdminUser } from "@/lib/firestore-schema";
 
 interface AuthContextType extends AuthState {
   login: (credentials: LoginCredentials) => Promise<void>;
@@ -15,44 +33,44 @@ interface AuthContextType extends AuthState {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 type AuthAction =
-  | { type: 'LOGIN_START' }
-  | { type: 'LOGIN_SUCCESS'; payload: User }
-  | { type: 'LOGIN_FAILURE'; payload: string }
-  | { type: 'LOGOUT' }
-  | { type: 'SET_LOADING'; payload: boolean }
-  | { type: 'CLEAR_ERROR' };
+  | { type: "LOGIN_START" }
+  | { type: "LOGIN_SUCCESS"; payload: User }
+  | { type: "LOGIN_FAILURE"; payload: string }
+  | { type: "LOGOUT" }
+  | { type: "SET_LOADING"; payload: boolean }
+  | { type: "CLEAR_ERROR" };
 
 const authReducer = (state: AuthState, action: AuthAction): AuthState => {
   switch (action.type) {
-    case 'LOGIN_START':
+    case "LOGIN_START":
       return { ...state, isLoading: true, error: null };
-    case 'LOGIN_SUCCESS':
+    case "LOGIN_SUCCESS":
       return {
         ...state,
         user: action.payload,
         isAuthenticated: true,
         isLoading: false,
-        error: null
+        error: null,
       };
-    case 'LOGIN_FAILURE':
+    case "LOGIN_FAILURE":
       return {
         ...state,
         user: null,
         isAuthenticated: false,
         isLoading: false,
-        error: action.payload
+        error: action.payload,
       };
-    case 'LOGOUT':
+    case "LOGOUT":
       return {
         ...state,
         user: null,
         isAuthenticated: false,
         isLoading: false,
-        error: null
+        error: null,
       };
-    case 'SET_LOADING':
+    case "SET_LOADING":
       return { ...state, isLoading: action.payload };
-    case 'CLEAR_ERROR':
+    case "CLEAR_ERROR":
       return { ...state, error: null };
     default:
       return state;
@@ -63,135 +81,156 @@ const initialState: AuthState = {
   user: null,
   isAuthenticated: false,
   isLoading: true,
-  error: null
+  error: null,
 };
 
-// Mock authentication service - replace with actual API calls
-const mockAuthService = {
-  async login(credentials: LoginCredentials): Promise<User> {
-    try {
-      // For development, we'll authenticate against Firestore admin users
-      const adminUser = await adminUserService.getAdminUserByEmail(credentials.email);
-      
-      if (!adminUser) {
-        throw new Error('Invalid credentials');
-      }
-      
-      // In a real app, you'd verify the password hash here
-      // For now, we'll use simple password check for development
-      const validPasswords = {
-        'admin@shipping.com': 'admin123',
-        'user@shipping.com': 'user123'
-      };
-      
-      if (validPasswords[credentials.email as keyof typeof validPasswords] !== credentials.password) {
-        throw new Error('Invalid credentials');
-      }
-      
-      if (!adminUser.isActive || adminUser.isLocked) {
-        throw new Error('Account is inactive or locked');
-      }
-      
-      return {
-        id: adminUser.uid,
-        email: adminUser.email,
-        name: adminUser.name,
-        role: adminUser.accessLevel === 'super_admin' ? UserRole.ADMIN : UserRole.USER,
-        avatar: '/img/testimonials-1.webp',
-        createdAt: adminUser.createdAt.toDate(),
-        lastLogin: new Date(),
-        isActive: adminUser.isActive
-      };
-    } catch (error) {
-      throw new Error(error instanceof Error ? error.message : 'Authentication failed');
-    }
-  },
-  
-  async checkAuth(): Promise<User | null> {
-    try {
-      const token = localStorage.getItem('auth_token');
-      if (!token) return null;
-      
-      // In development, we'll check for the seeded admin user
-      const adminUser = await adminUserService.getAdminUserByEmail('admin@shipping.com');
-      
-      if (!adminUser || !adminUser.isActive || adminUser.isLocked) {
-        return null;
-      }
-      
-      return {
-        id: adminUser.uid,
-        email: adminUser.email,
-        name: adminUser.name,
-        role: adminUser.accessLevel === 'super_admin' ? UserRole.ADMIN : UserRole.USER,
-        avatar: '/img/testimonials-1.webp',
-        createdAt: adminUser.createdAt.toDate(),
-        lastLogin: new Date(),
-        isActive: adminUser.isActive
-      };
-    } catch (error) {
-      console.error('Auth check failed:', error);
-      return null;
-    }
-  }
-};
+/**
+ * Convert a Firestore admin user document to our app's User type
+ */
+function mapAdminUserToUser(adminUser: FirestoreAdminUser): User {
+  return {
+    id: adminUser.uid,
+    email: adminUser.email,
+    name: adminUser.name,
+    role:
+      adminUser.accessLevel === "super_admin" ? UserRole.ADMIN : UserRole.USER,
+    avatar: "/img/testimonials-1.webp",
+    createdAt: adminUser.createdAt?.toDate?.() ?? new Date(),
+    lastLogin: new Date(),
+    isActive: adminUser.isActive,
+  };
+}
 
-export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+export const AuthProvider: React.FC<{ children: ReactNode }> = ({
+  children,
+}) => {
   const [state, dispatch] = useReducer(authReducer, initialState);
 
   const login = useCallback(async (credentials: LoginCredentials) => {
-    dispatch({ type: 'LOGIN_START' });
+    dispatch({ type: "LOGIN_START" });
     try {
-      const user = await mockAuthService.login(credentials);
-      const token = 'mock_token_' + user.id;
-      localStorage.setItem('auth_token', token);
-      // Set cookie for middleware
+      // Step 1: Authenticate with Firebase Auth FIRST
+      // This establishes an authenticated session before any Firestore queries
+      const userCredential = await signInWithEmailAndPassword(
+        auth,
+        credentials.email,
+        credentials.password,
+      );
+
+      const firebaseUser = userCredential.user;
+
+      // Step 2: Now that we're authenticated, fetch admin user data from Firestore
+      // Use direct document read by UID (not a collection query) to work with security rules
+      const adminUser = await adminUserService.getAdminUserByUid(
+        firebaseUser.uid,
+      );
+
+      if (!adminUser) {
+        // User exists in Firebase Auth but not in admin_users collection
+        await signOut(auth);
+        throw new Error("You do not have admin access");
+      }
+
+      if (!adminUser.isActive || adminUser.isLocked) {
+        await signOut(auth);
+        throw new Error("Account is inactive or locked");
+      }
+
+      const user = mapAdminUserToUser(adminUser);
+
+      // Set token for middleware cookie check
+      const token = await firebaseUser.getIdToken();
+      localStorage.setItem("auth_token", token);
       document.cookie = `auth-token=${token}; path=/; max-age=86400; secure; samesite=strict`;
-      dispatch({ type: 'LOGIN_SUCCESS', payload: user });
-    } catch (error) {
-      dispatch({ type: 'LOGIN_FAILURE', payload: (error as Error).message });
+
+      // Update last login in Firestore (non-blocking)
+      adminUserService.updateLastLogin(firebaseUser.uid).catch(console.error);
+
+      dispatch({ type: "LOGIN_SUCCESS", payload: user });
+    } catch (error: any) {
+      // Map Firebase Auth error codes to user-friendly messages
+      let message = "Authentication failed";
+      if (
+        error?.code === "auth/user-not-found" ||
+        error?.code === "auth/wrong-password" ||
+        error?.code === "auth/invalid-credential"
+      ) {
+        message = "Invalid email or password";
+      } else if (error?.code === "auth/too-many-requests") {
+        message = "Too many failed attempts. Please try again later.";
+      } else if (error instanceof Error) {
+        message = error.message;
+      }
+      dispatch({ type: "LOGIN_FAILURE", payload: message });
     }
   }, []);
 
-  const logout = useCallback(() => {
-    localStorage.removeItem('auth_token');
-    // Remove cookie
-    document.cookie = 'auth-token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
-    dispatch({ type: 'LOGOUT' });
+  const logout = useCallback(async () => {
+    try {
+      await signOut(auth);
+    } catch (error) {
+      console.error("Firebase sign out error:", error);
+    }
+    localStorage.removeItem("auth_token");
+    document.cookie =
+      "auth-token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+    dispatch({ type: "LOGOUT" });
   }, []);
 
   const checkAuth = useCallback(async () => {
-    dispatch({ type: 'SET_LOADING', payload: true });
-    try {
-      const user = await mockAuthService.checkAuth();
-      if (user) {
-        // Ensure cookie is set for middleware
-        const token = localStorage.getItem('auth_token');
-        if (token) {
-          document.cookie = `auth-token=${token}; path=/; max-age=86400; secure; samesite=strict`;
-        }
-        dispatch({ type: 'LOGIN_SUCCESS', payload: user });
-      } else {
-        dispatch({ type: 'LOGOUT' });
-      }
-    } catch (error) {
-      dispatch({ type: 'LOGOUT' });
-    } finally {
-      dispatch({ type: 'SET_LOADING', payload: false });
-    }
+    // checkAuth is handled by onAuthStateChanged listener below
+    // This is kept for interface compatibility
   }, []);
 
   useEffect(() => {
-    // Using development mode bypass for Firestore access
-    console.log('AuthContext initialized - using development mode for Firestore access');
-    checkAuth();
+    // Listen for Firebase Auth state changes
+    // This handles session persistence (page refresh, new tab, etc.)
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        try {
+          // User is signed in — fetch their admin data using direct document read
+          const adminUser = await adminUserService.getAdminUserByUid(
+            firebaseUser.uid,
+          );
+
+          if (adminUser && adminUser.isActive && !adminUser.isLocked) {
+            const user = mapAdminUserToUser(adminUser);
+
+            // Refresh token for middleware
+            const token = await firebaseUser.getIdToken();
+            localStorage.setItem("auth_token", token);
+            document.cookie = `auth-token=${token}; path=/; max-age=86400; secure; samesite=strict`;
+
+            dispatch({ type: "LOGIN_SUCCESS", payload: user });
+          } else {
+            // Admin user not found or inactive — sign out
+            await signOut(auth);
+            localStorage.removeItem("auth_token");
+            document.cookie =
+              "auth-token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+            dispatch({ type: "LOGOUT" });
+          }
+        } catch (error) {
+          console.error("Auth state check failed:", error);
+          dispatch({ type: "LOGOUT" });
+        }
+      } else {
+        // No user signed in
+        localStorage.removeItem("auth_token");
+        document.cookie =
+          "auth-token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+        dispatch({ type: "LOGOUT" });
+      }
+    });
+
+    return () => unsubscribe();
   }, []);
 
   const value: AuthContextType = {
     ...state,
     login,
     logout,
-    checkAuth
+    checkAuth,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -200,19 +239,19 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 export const useAuth = (): AuthContextType => {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
 };
 
 export const usePermissions = () => {
   const { user } = useAuth();
-  
+
   const checkPermission = (resource: string, action: string): boolean => {
     if (!user) return false;
-    
+
     return hasPermission(user.role, resource, action);
   };
-  
+
   return { hasPermission: checkPermission };
 };

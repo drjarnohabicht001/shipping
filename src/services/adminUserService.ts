@@ -141,6 +141,27 @@ export class AdminUserService {
   }
 
   /**
+   * Get admin user by UID (direct document read - works with Firestore security rules)
+   * This is preferred over getAdminUserByEmail when you already have the UID,
+   * as it reads a single document instead of querying the collection.
+   */
+  async getAdminUserByUid(uid: string): Promise<FirestoreAdminUser | null> {
+    try {
+      const docRef = doc(db, this.collection, uid);
+      const docSnap = await getDoc(docRef);
+      
+      if (docSnap.exists()) {
+        return { uid: docSnap.id, ...docSnap.data() } as FirestoreAdminUser;
+      }
+      
+      return null;
+    } catch (error) {
+      console.error(`Failed to get admin user by UID: ${error}`);
+      return null;
+    }
+  }
+
+  /**
    * Update admin user with audit trail
    */
   async updateAdminUser(

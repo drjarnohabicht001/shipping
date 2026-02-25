@@ -55,8 +55,9 @@ service cloud.firestore {
                        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['uid']));
       
       // Admin users can read their own data, super admins can read all
+      // Authenticated users can query (needed for email check during creation)
       // Allow reading in development mode for auth bootstrapping
-      allow read: if isDevelopmentMode() || isOwnerOrSuperAdmin(userId);
+      allow read: if isDevelopmentMode() || isAuthenticated();
       
       // Only super admins can update other admin users, users can update limited fields of their own data
       allow update: if (request.auth.uid == userId && 
