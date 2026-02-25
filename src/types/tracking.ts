@@ -1,5 +1,6 @@
 // Re-export TrackingStatus from firestore-schema to avoid conflicts
-export { TrackingStatus } from '../lib/firestore-schema';
+import { TrackingStatus } from '../lib/firestore-schema';
+export { TrackingStatus };
 
 export interface TrackingNumber {
   id: string;
@@ -109,26 +110,32 @@ export interface AuditLog {
 
 export const TRACKING_STATUS_LABELS: Record<TrackingStatus, string> = {
   pending: 'Pending Pickup',
+  label_created: 'Label Created',
   picked_up: 'Picked Up',
   in_transit: 'In Transit',
   out_for_delivery: 'Out for Delivery',
   delivered: 'Delivered',
   failed_delivery: 'Failed Delivery',
-  returned: 'Returned',
+  returned_to_sender: 'Returned to Sender',
   cancelled: 'Cancelled',
-  exception: 'Exception'
+  exception: 'Exception',
+  customs_clearance: 'Customs Clearance',
+  delayed: 'Delayed'
 };
 
 export const TRACKING_STATUS_COLORS: Record<TrackingStatus, string> = {
   pending: 'bg-yellow-100 text-yellow-800',
+  label_created: 'bg-indigo-100 text-indigo-800',
   picked_up: 'bg-blue-100 text-blue-800',
   in_transit: 'bg-purple-100 text-purple-800',
   out_for_delivery: 'bg-orange-100 text-orange-800',
   delivered: 'bg-green-100 text-green-800',
   failed_delivery: 'bg-red-100 text-red-800',
-  returned: 'bg-gray-100 text-gray-800',
+  returned_to_sender: 'bg-gray-100 text-gray-800',
   cancelled: 'bg-red-100 text-red-800',
-  exception: 'bg-amber-100 text-amber-800'
+  exception: 'bg-amber-100 text-amber-800',
+  customs_clearance: 'bg-teal-100 text-teal-800',
+  delayed: 'bg-pink-100 text-pink-800'
 };
 
 export const PRIORITY_COLORS: Record<string, string> = {

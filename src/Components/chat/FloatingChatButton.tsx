@@ -1,20 +1,20 @@
-'use client';
+"use client";
 
-import { MessageCircle } from 'lucide-react';
-import { useChatWidget } from '@/hooks/useChatWidget';
-import ChatWidget from './ChatWidget';
+import { MessageCircle } from "lucide-react";
+import { useChatWidget } from "@/hooks/useChatWidget";
+import ChatWidget from "@/Components/chat/ChatWidget";
 
 export default function FloatingChatButton() {
-  const { 
-    isOpen, 
-    setIsOpen, 
+  const {
+    isOpen,
+    setIsOpen,
     unreadCount,
     messages,
     isLoading,
     error,
     hasUserInfo,
     sendMessage,
-    initializeChat
+    initializeChat,
   } = useChatWidget();
 
   return (
@@ -26,11 +26,11 @@ export default function FloatingChatButton() {
         aria-label="Open chat"
       >
         <MessageCircle className="w-7 h-7 group-hover:scale-110 transition-transform" />
-        
+
         {/* Unread Badge */}
         {unreadCount > 0 && (
           <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center animate-pulse">
-            {unreadCount > 9 ? '9+' : unreadCount}
+            {unreadCount > 9 ? "9+" : unreadCount}
           </span>
         )}
 
@@ -39,7 +39,7 @@ export default function FloatingChatButton() {
       </button>
 
       {/* Chat Widget */}
-      <ChatWidget 
+      <ChatWidget
         isOpen={isOpen}
         onClose={() => setIsOpen(false)}
         messages={messages}

@@ -321,7 +321,7 @@ class QuoteService {
       );
 
       const docRef = doc(db, FIRESTORE_COLLECTIONS.QUOTES, request.quoteId);
-      await updateDoc(docRef, cleanedData);
+      await updateDoc(docRef, cleanedData as any);
     } catch (error) {
       console.error('Error updating quote:', error);
       throw new Error('Failed to update quote');

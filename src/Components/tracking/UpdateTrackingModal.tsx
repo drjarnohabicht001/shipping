@@ -1,9 +1,9 @@
-'use client';
+"use client";
 
-import React, { useState, useEffect } from 'react';
-import { X, Package, MapPin, Save, AlertCircle, Calendar } from 'lucide-react';
-import { TrackingStatus, FirestoreTrackingItem } from '@/lib/firestore-schema';
-import { Timestamp } from 'firebase/firestore';
+import React, { useState, useEffect } from "react";
+import { X, Package, MapPin, Save, AlertCircle, Calendar } from "lucide-react";
+import { TrackingStatus, FirestoreTrackingItem } from "@/lib/firestore-schema";
+import { Timestamp } from "firebase/firestore";
 
 interface UpdateTrackingModalProps {
   isOpen: boolean;
@@ -29,65 +29,65 @@ interface UpdateTrackingModalProps {
   }) => Promise<void>;
 }
 
-const UpdateTrackingModal: React.FC<UpdateTrackingModalProps> = ({ 
-  isOpen, 
-  onClose, 
+const UpdateTrackingModal: React.FC<UpdateTrackingModalProps> = ({
+  isOpen,
+  onClose,
   tracking,
-  onSubmit 
+  onSubmit,
 }) => {
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     status: TrackingStatus.PENDING,
     location: {
-      city: '',
-      state: '',
-      country: '',
-      facility: '',
+      city: "",
+      state: "",
+      country: "",
+      facility: "",
       coordinates: {
         latitude: 0,
-        longitude: 0
-      }
+        longitude: 0,
+      },
     },
-    description: '',
-    notes: '',
+    description: "",
+    notes: "",
     isPublic: true,
     hasLocation: false,
     hasCoordinates: false,
     updateEstimatedDelivery: false,
-    estimatedDeliveryDate: ''
+    estimatedDeliveryDate: "",
   });
 
   useEffect(() => {
     if (tracking) {
-      let estimatedDate = '';
+      let estimatedDate = "";
       if (tracking.estimatedDeliveryDate) {
-        const date = tracking.estimatedDeliveryDate.toDate 
-          ? tracking.estimatedDeliveryDate.toDate() 
-          : tracking.estimatedDeliveryDate instanceof Date 
-            ? tracking.estimatedDeliveryDate 
-            : new Date(tracking.estimatedDeliveryDate);
-        estimatedDate = date.toISOString().split('T')[0];
+        const date = tracking.estimatedDeliveryDate.toDate
+          ? tracking.estimatedDeliveryDate.toDate()
+          : tracking.estimatedDeliveryDate instanceof Date
+            ? tracking.estimatedDeliveryDate
+            : new Date(tracking.estimatedDeliveryDate as any);
+        estimatedDate = date.toISOString().split("T")[0];
       }
-      
+
       setFormData({
         status: tracking.status,
-        location: tracking.currentLocation || {
-          city: '',
-          state: '',
-          country: '',
-          facility: '',
+        location: (tracking.currentLocation as any) || {
+          city: "",
+          state: "",
+          country: "",
+          facility: "",
           coordinates: {
             latitude: 0,
-            longitude: 0
-          }
+            longitude: 0,
+          },
         },
-        description: '',
-        notes: '',
+        description: "",
+        notes: "",
         isPublic: true,
         hasLocation: !!tracking.currentLocation,
-        hasCoordinates: !!(tracking.currentLocation?.coordinates),
+        hasCoordinates: !!tracking.currentLocation?.coordinates,
         updateEstimatedDelivery: false,
-        estimatedDeliveryDate: estimatedDate
+        estimatedDeliveryDate: estimatedDate,
       });
     }
   }, [tracking]);
@@ -98,44 +98,48 @@ const UpdateTrackingModal: React.FC<UpdateTrackingModalProps> = ({
 
     // Validate required fields
     if (!formData.description.trim()) {
-      alert('Please provide a description for the status update');
+      alert("Please provide a description for the status update");
       return;
     }
 
     if (formData.hasLocation) {
       if (!formData.location.city.trim() || !formData.location.country.trim()) {
-        alert('Please provide both city and country when updating location');
+        alert("Please provide both city and country when updating location");
         return;
       }
     }
 
     setLoading(true);
-    
+
     try {
       // Build location object, removing undefined values and empty strings
       let locationObj: any = undefined;
-      if (formData.hasLocation && 
-          formData.location.city.trim() && 
-          formData.location.country.trim()) {
+      if (
+        formData.hasLocation &&
+        formData.location.city.trim() &&
+        formData.location.country.trim()
+      ) {
         locationObj = {
           city: formData.location.city.trim(),
-          country: formData.location.country.trim()
+          country: formData.location.country.trim(),
         };
-        
+
         if (formData.location.state && formData.location.state.trim()) {
           locationObj.state = formData.location.state.trim();
         }
-        
+
         if (formData.location.facility && formData.location.facility.trim()) {
           locationObj.facility = formData.location.facility.trim();
         }
-        
-        if (formData.hasCoordinates && 
-            formData.location.coordinates.latitude && 
-            formData.location.coordinates.longitude) {
+
+        if (
+          formData.hasCoordinates &&
+          formData.location.coordinates.latitude &&
+          formData.location.coordinates.longitude
+        ) {
           locationObj.coordinates = {
             latitude: Number(formData.location.coordinates.latitude),
-            longitude: Number(formData.location.coordinates.longitude)
+            longitude: Number(formData.location.coordinates.longitude),
           };
         }
       }
@@ -145,7 +149,7 @@ const UpdateTrackingModal: React.FC<UpdateTrackingModalProps> = ({
       if (formData.updateEstimatedDelivery && formData.estimatedDeliveryDate) {
         estimatedDeliveryDate = new Date(formData.estimatedDeliveryDate);
         if (isNaN(estimatedDeliveryDate.getTime())) {
-          alert('Please provide a valid estimated delivery date');
+          alert("Please provide a valid estimated delivery date");
           setLoading(false);
           return;
         }
@@ -154,17 +158,18 @@ const UpdateTrackingModal: React.FC<UpdateTrackingModalProps> = ({
       const submitData = {
         trackingId: tracking.trackingId,
         status: formData.status,
-        description: formData.description.trim() || `Status updated to ${formData.status}`,
+        description:
+          formData.description.trim() || `Status updated to ${formData.status}`,
         notes: formData.notes?.trim() || undefined,
         isPublic: formData.isPublic,
         location: locationObj,
-        estimatedDeliveryDate: estimatedDeliveryDate
+        estimatedDeliveryDate: estimatedDeliveryDate,
       };
-      
+
       await onSubmit(submitData);
       onClose();
     } catch (error) {
-      console.error('Error updating tracking:', error);
+      console.error("Error updating tracking:", error);
       // Error will be handled by parent component
     } finally {
       setLoading(false);
@@ -172,16 +177,16 @@ const UpdateTrackingModal: React.FC<UpdateTrackingModalProps> = ({
   };
 
   const updateFormData = (path: string, value: any) => {
-    setFormData(prev => {
-      const keys = path.split('.');
+    setFormData((prev) => {
+      const keys = path.split(".");
       const newData = { ...prev };
       let current: any = newData;
-      
+
       for (let i = 0; i < keys.length - 1; i++) {
         current[keys[i]] = { ...current[keys[i]] };
         current = current[keys[i]];
       }
-      
+
       current[keys[keys.length - 1]] = value;
       return newData;
     });
@@ -190,18 +195,18 @@ const UpdateTrackingModal: React.FC<UpdateTrackingModalProps> = ({
   if (!isOpen || !tracking) return null;
 
   const statusOptions = [
-    { value: TrackingStatus.PENDING, label: 'Pending Pickup' },
-    { value: TrackingStatus.LABEL_CREATED, label: 'Label Created' },
-    { value: TrackingStatus.PICKED_UP, label: 'Picked Up' },
-    { value: TrackingStatus.IN_TRANSIT, label: 'In Transit' },
-    { value: TrackingStatus.OUT_FOR_DELIVERY, label: 'Out for Delivery' },
-    { value: TrackingStatus.DELIVERED, label: 'Delivered' },
-    { value: TrackingStatus.FAILED_DELIVERY, label: 'Failed Delivery' },
-    { value: TrackingStatus.RETURNED_TO_SENDER, label: 'Returned to Sender' },
-    { value: TrackingStatus.CANCELLED, label: 'Cancelled' },
-    { value: TrackingStatus.EXCEPTION, label: 'Exception' },
-    { value: TrackingStatus.CUSTOMS_CLEARANCE, label: 'Customs Clearance' },
-    { value: TrackingStatus.DELAYED, label: 'Delayed' }
+    { value: TrackingStatus.PENDING, label: "Pending Pickup" },
+    { value: TrackingStatus.LABEL_CREATED, label: "Label Created" },
+    { value: TrackingStatus.PICKED_UP, label: "Picked Up" },
+    { value: TrackingStatus.IN_TRANSIT, label: "In Transit" },
+    { value: TrackingStatus.OUT_FOR_DELIVERY, label: "Out for Delivery" },
+    { value: TrackingStatus.DELIVERED, label: "Delivered" },
+    { value: TrackingStatus.FAILED_DELIVERY, label: "Failed Delivery" },
+    { value: TrackingStatus.RETURNED_TO_SENDER, label: "Returned to Sender" },
+    { value: TrackingStatus.CANCELLED, label: "Cancelled" },
+    { value: TrackingStatus.EXCEPTION, label: "Exception" },
+    { value: TrackingStatus.CUSTOMS_CLEARANCE, label: "Customs Clearance" },
+    { value: TrackingStatus.DELAYED, label: "Delayed" },
   ];
 
   return (
@@ -226,30 +231,38 @@ const UpdateTrackingModal: React.FC<UpdateTrackingModalProps> = ({
             <div className="text-sm">
               <div className="flex justify-between mb-2">
                 <span className="text-gray-600">Tracking ID:</span>
-                <span className="font-mono font-semibold text-gray-900">{tracking.trackingId}</span>
+                <span className="font-mono font-semibold text-gray-900">
+                  {tracking.trackingId}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Item:</span>
-                <span className="font-medium text-gray-900">{tracking.itemName}</span>
+                <span className="font-medium text-gray-900">
+                  {tracking.itemName}
+                </span>
               </div>
             </div>
           </div>
 
           {/* Status Update */}
           <div className="space-y-4">
-            <h3 className="text-lg font-medium text-gray-900">Status Information</h3>
-            
+            <h3 className="text-lg font-medium text-gray-900">
+              Status Information
+            </h3>
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 New Status *
               </label>
               <select
                 value={formData.status}
-                onChange={(e) => updateFormData('status', e.target.value as TrackingStatus)}
+                onChange={(e) =>
+                  updateFormData("status", e.target.value as TrackingStatus)
+                }
                 required
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FF5A24] focus:border-[#FF5A24]"
               >
-                {statusOptions.map(option => (
+                {statusOptions.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
                   </option>
@@ -263,7 +276,7 @@ const UpdateTrackingModal: React.FC<UpdateTrackingModalProps> = ({
               </label>
               <textarea
                 value={formData.description}
-                onChange={(e) => updateFormData('description', e.target.value)}
+                onChange={(e) => updateFormData("description", e.target.value)}
                 required
                 rows={3}
                 placeholder="Describe the status update (e.g., Package arrived at distribution center)"
@@ -277,7 +290,7 @@ const UpdateTrackingModal: React.FC<UpdateTrackingModalProps> = ({
               </label>
               <textarea
                 value={formData.notes}
-                onChange={(e) => updateFormData('notes', e.target.value)}
+                onChange={(e) => updateFormData("notes", e.target.value)}
                 rows={2}
                 placeholder="Optional notes for internal use"
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FF5A24] focus:border-[#FF5A24]"
@@ -289,10 +302,13 @@ const UpdateTrackingModal: React.FC<UpdateTrackingModalProps> = ({
                 type="checkbox"
                 id="isPublic"
                 checked={formData.isPublic}
-                onChange={(e) => updateFormData('isPublic', e.target.checked)}
+                onChange={(e) => updateFormData("isPublic", e.target.checked)}
                 className="h-4 w-4 text-[#FF5A24] focus:ring-[#FF5A24] border-gray-300 rounded"
               />
-              <label htmlFor="isPublic" className="ml-2 block text-sm text-gray-700">
+              <label
+                htmlFor="isPublic"
+                className="ml-2 block text-sm text-gray-700"
+              >
                 Make this update visible to customers
               </label>
             </div>
@@ -310,10 +326,15 @@ const UpdateTrackingModal: React.FC<UpdateTrackingModalProps> = ({
                   type="checkbox"
                   id="hasLocation"
                   checked={formData.hasLocation}
-                  onChange={(e) => updateFormData('hasLocation', e.target.checked)}
+                  onChange={(e) =>
+                    updateFormData("hasLocation", e.target.checked)
+                  }
                   className="h-4 w-4 text-[#FF5A24] focus:ring-[#FF5A24] border-gray-300 rounded"
                 />
-                <label htmlFor="hasLocation" className="ml-2 block text-sm text-gray-700">
+                <label
+                  htmlFor="hasLocation"
+                  className="ml-2 block text-sm text-gray-700"
+                >
                   Update location
                 </label>
               </div>
@@ -330,7 +351,9 @@ const UpdateTrackingModal: React.FC<UpdateTrackingModalProps> = ({
                       type="text"
                       required={formData.hasLocation}
                       value={formData.location.city}
-                      onChange={(e) => updateFormData('location.city', e.target.value)}
+                      onChange={(e) =>
+                        updateFormData("location.city", e.target.value)
+                      }
                       placeholder="e.g., New York"
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FF5A24] focus:border-[#FF5A24]"
                     />
@@ -342,7 +365,9 @@ const UpdateTrackingModal: React.FC<UpdateTrackingModalProps> = ({
                     <input
                       type="text"
                       value={formData.location.state}
-                      onChange={(e) => updateFormData('location.state', e.target.value)}
+                      onChange={(e) =>
+                        updateFormData("location.state", e.target.value)
+                      }
                       placeholder="e.g., NY"
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FF5A24] focus:border-[#FF5A24]"
                     />
@@ -355,7 +380,9 @@ const UpdateTrackingModal: React.FC<UpdateTrackingModalProps> = ({
                       type="text"
                       required={formData.hasLocation}
                       value={formData.location.country}
-                      onChange={(e) => updateFormData('location.country', e.target.value)}
+                      onChange={(e) =>
+                        updateFormData("location.country", e.target.value)
+                      }
                       placeholder="e.g., United States"
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FF5A24] focus:border-[#FF5A24]"
                     />
@@ -367,7 +394,9 @@ const UpdateTrackingModal: React.FC<UpdateTrackingModalProps> = ({
                     <input
                       type="text"
                       value={formData.location.facility}
-                      onChange={(e) => updateFormData('location.facility', e.target.value)}
+                      onChange={(e) =>
+                        updateFormData("location.facility", e.target.value)
+                      }
                       placeholder="e.g., Distribution Center #5"
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FF5A24] focus:border-[#FF5A24]"
                     />
@@ -381,10 +410,15 @@ const UpdateTrackingModal: React.FC<UpdateTrackingModalProps> = ({
                       type="checkbox"
                       id="hasCoordinates"
                       checked={formData.hasCoordinates}
-                      onChange={(e) => updateFormData('hasCoordinates', e.target.checked)}
+                      onChange={(e) =>
+                        updateFormData("hasCoordinates", e.target.checked)
+                      }
                       className="h-4 w-4 text-[#FF5A24] focus:ring-[#FF5A24] border-gray-300 rounded"
                     />
-                    <label htmlFor="hasCoordinates" className="ml-2 block text-sm text-gray-700">
+                    <label
+                      htmlFor="hasCoordinates"
+                      className="ml-2 block text-sm text-gray-700"
+                    >
                       Include GPS coordinates (optional)
                     </label>
                   </div>
@@ -398,8 +432,13 @@ const UpdateTrackingModal: React.FC<UpdateTrackingModalProps> = ({
                         <input
                           type="number"
                           step="any"
-                          value={formData.location.coordinates.latitude || ''}
-                          onChange={(e) => updateFormData('location.coordinates.latitude', parseFloat(e.target.value) || 0)}
+                          value={formData.location.coordinates.latitude || ""}
+                          onChange={(e) =>
+                            updateFormData(
+                              "location.coordinates.latitude",
+                              parseFloat(e.target.value) || 0,
+                            )
+                          }
                           placeholder="e.g., 40.7128"
                           className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FF5A24] focus:border-[#FF5A24]"
                         />
@@ -411,8 +450,13 @@ const UpdateTrackingModal: React.FC<UpdateTrackingModalProps> = ({
                         <input
                           type="number"
                           step="any"
-                          value={formData.location.coordinates.longitude || ''}
-                          onChange={(e) => updateFormData('location.coordinates.longitude', parseFloat(e.target.value) || 0)}
+                          value={formData.location.coordinates.longitude || ""}
+                          onChange={(e) =>
+                            updateFormData(
+                              "location.coordinates.longitude",
+                              parseFloat(e.target.value) || 0,
+                            )
+                          }
                           placeholder="e.g., -74.0060"
                           className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FF5A24] focus:border-[#FF5A24]"
                         />
@@ -436,10 +480,15 @@ const UpdateTrackingModal: React.FC<UpdateTrackingModalProps> = ({
                   type="checkbox"
                   id="updateEstimatedDelivery"
                   checked={formData.updateEstimatedDelivery}
-                  onChange={(e) => updateFormData('updateEstimatedDelivery', e.target.checked)}
+                  onChange={(e) =>
+                    updateFormData("updateEstimatedDelivery", e.target.checked)
+                  }
                   className="h-4 w-4 text-[#FF5A24] focus:ring-[#FF5A24] border-gray-300 rounded"
                 />
-                <label htmlFor="updateEstimatedDelivery" className="ml-2 block text-sm text-gray-700">
+                <label
+                  htmlFor="updateEstimatedDelivery"
+                  className="ml-2 block text-sm text-gray-700"
+                >
                   Update estimated delivery
                 </label>
               </div>
@@ -455,8 +504,10 @@ const UpdateTrackingModal: React.FC<UpdateTrackingModalProps> = ({
                     type="date"
                     required={formData.updateEstimatedDelivery}
                     value={formData.estimatedDeliveryDate}
-                    onChange={(e) => updateFormData('estimatedDeliveryDate', e.target.value)}
-                    min={new Date().toISOString().split('T')[0]}
+                    onChange={(e) =>
+                      updateFormData("estimatedDeliveryDate", e.target.value)
+                    }
+                    min={new Date().toISOString().split("T")[0]}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FF5A24] focus:border-[#FF5A24]"
                   />
                   <p className="text-xs text-gray-500 mt-1">
@@ -483,7 +534,7 @@ const UpdateTrackingModal: React.FC<UpdateTrackingModalProps> = ({
               className="px-6 py-2 bg-[#FF5A24] text-white rounded-lg hover:bg-[#e54a1f] disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors"
             >
               <Save className="h-4 w-4" />
-              {loading ? 'Updating...' : 'Update Status'}
+              {loading ? "Updating..." : "Update Status"}
             </button>
           </div>
         </form>

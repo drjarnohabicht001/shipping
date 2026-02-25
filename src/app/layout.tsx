@@ -5,7 +5,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 //import Footer from "./components/Footer";
 import { ToastProvider } from "@/Components/toast";
 import { AuthProvider } from "@/contexts/AuthContext";
-import ChatButtonWrapper from "@/components/chat/ChatButtonWrapper";
+import ChatButtonWrapper from "@/Components/chat/ChatButtonWrapper";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -33,14 +33,10 @@ export default function RootLayout({
       <body className="antialiased">
         <AuthProvider>
           <ToastProvider>
-              
-            <main>
-              {children}
-            </main>
-            
+            <main>{children}</main>
+
             {/* Floating Chat Button */}
             <ChatButtonWrapper />
-           
           </ToastProvider>
         </AuthProvider>
       </body>

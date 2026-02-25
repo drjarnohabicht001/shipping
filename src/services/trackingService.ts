@@ -155,7 +155,7 @@ class TrackingService {
       itemDescription: request.itemDescription,
       sender: request.sender,
       recipient: request.recipient,
-      status: 'pending',
+      status: TrackingStatus.PENDING,
       priority: request.priority,
       serviceType: request.serviceType,
       weight: request.weight,
@@ -169,7 +169,7 @@ class TrackingService {
       history: [
         {
           id: this.generateId(),
-          status: 'pending',
+          status: TrackingStatus.PENDING,
           location: 'Origin Facility',
           timestamp: now,
           description: 'Tracking number generated and shipment created',
@@ -300,7 +300,7 @@ class TrackingService {
     tracking.history.unshift(historyEntry);
 
     // Set actual delivery date if delivered
-    if (newStatus === 'delivered') {
+    if (newStatus === TrackingStatus.DELIVERED) {
       tracking.actualDelivery = now;
     }
 
