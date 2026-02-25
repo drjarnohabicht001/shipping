@@ -65,22 +65,46 @@ const TrackingLookup: React.FC<TrackingLookupProps> = ({ className = '' }) => {
   const formatDate = (timestamp: any) => {
     if (!timestamp) return 'N/A';
     
-    let date: Date;
-    if (timestamp && typeof timestamp.toDate === 'function') {
-      date = timestamp.toDate();
-    } else if (timestamp instanceof Date) {
-      date = timestamp;
-    } else {
-      date = new Date(timestamp);
+    try {
+      let date: Date;
+      
+      // Handle Firestore Timestamp
+      if (timestamp && typeof timestamp.toDate === 'function') {
+        date = timestamp.toDate();
+      } 
+      // Handle Firestore Timestamp with seconds/nanoseconds
+      else if (timestamp && typeof timestamp.seconds === 'number') {
+        date = new Date(timestamp.seconds * 1000);
+      }
+      // Handle Date object
+      else if (timestamp instanceof Date) {
+        date = timestamp;
+      }
+      // Handle string or number
+      else if (typeof timestamp === 'string' || typeof timestamp === 'number') {
+        date = new Date(timestamp);
+      }
+      // Fallback
+      else {
+        return 'N/A';
+      }
+      
+      // Check if date is valid
+      if (isNaN(date.getTime())) {
+        return 'N/A';
+      }
+      
+      return date.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch (error) {
+      console.error('Error formatting date:', error, timestamp);
+      return 'N/A';
     }
-    
-    return date.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
   };
 
   return (
@@ -94,7 +118,7 @@ const TrackingLookup: React.FC<TrackingLookupProps> = ({ className = '' }) => {
               value={trackingInput}
               onChange={(e) => setTrackingInput(e.target.value)}
               placeholder="Enter your tracking number (e.g., SH-2024-000001)"
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FF5A24] focus:border-[#FF5A24] text-lg"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FF5A24] focus:border-[#FF5A24] text-lg text-gray-900"
               disabled={loading}
             />
           </div>
@@ -231,14 +255,14 @@ const TrackingLookup: React.FC<TrackingLookupProps> = ({ className = '' }) => {
               <div className="flex items-center gap-4 text-sm">
                 <div className="flex items-center gap-2">
                   <Clock className="w-4 h-4 text-gray-500" />
-                  <span className="text-gray-600">Estimated Delivery:</span>
-                  <span className="font-medium">{formatDate(trackingItem.estimatedDeliveryDate)}</span>
+                  <span className="text-blue-600 font-medium">Estimated Delivery:</span>
+                  <span className="font-medium text-gray-900">{formatDate(trackingItem.estimatedDeliveryDate)}</span>
                 </div>
                 {trackingItem.actualDeliveryDate && (
                   <div className="flex items-center gap-2">
                     <CheckCircle className="w-4 h-4 text-green-500" />
                     <span className="text-gray-600">Delivered:</span>
-                    <span className="font-medium">{formatDate(trackingItem.actualDeliveryDate)}</span>
+                    <span className="font-medium text-gray-900">{formatDate(trackingItem.actualDeliveryDate)}</span>
                   </div>
                 )}
               </div>
@@ -247,16 +271,30 @@ const TrackingLookup: React.FC<TrackingLookupProps> = ({ className = '' }) => {
 
           {/* Current Location */}
           {trackingItem.currentLocation && (
-            <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-100">
-              <h3 className="font-medium text-gray-900 mb-4 flex items-center gap-2">
-                <MapPin className="w-5 h-5" />
+            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl shadow-lg p-6 border-2 border-blue-200">
+              <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                <MapPin className="w-6 h-6 text-[#FF5A24]" />
                 Current Location
               </h3>
-              <div className="text-sm">
-                <p className="font-medium">{trackingItem.currentLocation.city}, {trackingItem.currentLocation.country}</p>
-                {trackingItem.currentLocation.facility && (
-                  <p className="text-gray-600">{trackingItem.currentLocation.facility}</p>
-                )}
+              <div className="space-y-2">
+                <div className="flex items-start gap-2">
+                  <MapPin className="w-4 h-4 text-[#FF5A24] mt-1 flex-shrink-0" />
+                  <div>
+                    <p className="font-semibold text-lg text-gray-900">
+                      {trackingItem.currentLocation.city}
+                      {trackingItem.currentLocation.state && `, ${trackingItem.currentLocation.state}`}
+                    </p>
+                    <p className="text-gray-700">{trackingItem.currentLocation.country}</p>
+                    {trackingItem.currentLocation.facility && (
+                      <p className="text-sm text-gray-600 mt-1 italic">{trackingItem.currentLocation.facility}</p>
+                    )}
+                    {trackingItem.currentLocation.coordinates && (
+                      <p className="text-xs text-gray-500 mt-2">
+                        📍 Coordinates: {trackingItem.currentLocation.coordinates.latitude.toFixed(4)}, {trackingItem.currentLocation.coordinates.longitude.toFixed(4)}
+                      </p>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
           )}

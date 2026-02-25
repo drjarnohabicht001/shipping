@@ -6,6 +6,9 @@ import { useAuth, usePermissions } from '@/contexts/AuthContext';
 import FirestoreTrackingService, { TrackingSearchFilters } from '@/services/firestoreTrackingService';
 import { FirestoreTrackingItem, TrackingStatus } from '@/lib/firestore-schema';
 import CreateTrackingModal from '@/Components/tracking/CreateTrackingModal';
+import UpdateTrackingModal from '@/Components/tracking/UpdateTrackingModal';
+import { generateReceiptPDF } from '@/utils/pdfGenerator';
+import { FileText } from 'lucide-react';
 
 interface TrackingStats {
   total: number;
@@ -69,13 +72,23 @@ export default function AdminTrackingDashboard() {
       const results = await trackingService.searchTrackingItems(filters);
       setTrackings(results);
       
-      // Calculate stats
+      // Always load all items for accurate stats (not just filtered results)
+      const allItems = await trackingService.getAllTrackingItems();
+      
       const newStats = {
-        total: results.length,
-        pending: results.filter((t: any) => t.status === TrackingStatus.PENDING).length,
-        inTransit: results.filter((t: any) => [TrackingStatus.PICKED_UP, TrackingStatus.IN_TRANSIT, TrackingStatus.OUT_FOR_DELIVERY].includes(t.status)).length,
-        delivered: results.filter((t: any) => t.status === TrackingStatus.DELIVERED).length,
-        failed: results.filter((t: any) => [TrackingStatus.FAILED_DELIVERY, TrackingStatus.RETURNED_TO_SENDER].includes(t.status)).length
+        total: allItems.length,
+        pending: allItems.filter((t) => t.status === TrackingStatus.PENDING).length,
+        inTransit: allItems.filter((t) => [
+          TrackingStatus.PICKED_UP, 
+          TrackingStatus.IN_TRANSIT, 
+          TrackingStatus.OUT_FOR_DELIVERY
+        ].includes(t.status)).length,
+        delivered: allItems.filter((t) => t.status === TrackingStatus.DELIVERED).length,
+        failed: allItems.filter((t) => [
+          TrackingStatus.FAILED_DELIVERY, 
+          TrackingStatus.RETURNED_TO_SENDER,
+          TrackingStatus.CANCELLED
+        ].includes(t.status)).length
       };
       setStats(newStats);
     } catch (err) {
@@ -88,32 +101,55 @@ export default function AdminTrackingDashboard() {
 
   const handleCreateTracking = async (data: any) => {
     try {
-      await trackingService.createTrackingItem(data, 'admin-user'); // TODO: Get actual user ID
+      const userId = user?.id || 'system';
+      const newItem = await trackingService.createTrackingItem(data, userId);
+      
+      // Generate receipt PDF
+      await generateReceiptPDF(newItem);
+      
       setShowCreateModal(false);
-      loadTrackings();
+      await loadTrackings();
     } catch (err) {
       console.error('Error creating tracking:', err);
+      setError('Failed to create tracking item');
     }
   };
 
-  const handleUpdateStatus = async (trackingId: string, status: TrackingStatus, location?: string, notes?: string) => {
+  const handleUpdateStatus = async (data: {
+    trackingId: string;
+    status: TrackingStatus;
+    location?: {
+      city: string;
+      state?: string;
+      country: string;
+      facility?: string;
+      coordinates?: {
+        latitude: number;
+        longitude: number;
+      };
+    };
+    description: string;
+    notes?: string;
+    isPublic?: boolean;
+    estimatedDeliveryDate?: Date;
+  }) => {
     try {
+      const userId = user?.id || 'system';
       const updateRequest = {
-        trackingId,
-        status,
-        description: `Status updated to ${status}`,
-        updatedBy: 'admin-user', // TODO: Get actual user ID
-        notes,
-        location: location ? {
-          city: location,
-          country: 'US' // TODO: Parse location properly
-        } : undefined
+        ...data,
+        updatedBy: userId
       };
       await trackingService.updateTrackingStatus(updateRequest);
       setShowUpdateModal(false);
-      loadTrackings();
-    } catch (err) {
+      setSelectedTracking(null);
+      // Reload trackings to update the list and stats cards
+      await loadTrackings();
+    } catch (err: any) {
       console.error('Error updating status:', err);
+      const errorMessage = err?.message || 'Failed to update tracking status';
+      setError(errorMessage);
+      // Show error for a few seconds then clear
+      setTimeout(() => setError(null), 5000);
     }
   };
 
@@ -158,6 +194,22 @@ export default function AdminTrackingDashboard() {
           </button>
         )}
       </div>
+
+      {/* Error Display */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="h-5 w-5 text-red-600" />
+            <p className="text-sm text-red-800">{error}</p>
+          </div>
+          <button
+            onClick={() => setError(null)}
+            className="text-red-600 hover:text-red-800"
+          >
+            <AlertCircle className="h-4 w-4" />
+          </button>
+        </div>
+      )}
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
@@ -312,6 +364,13 @@ export default function AdminTrackingDashboard() {
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <div className="flex items-center gap-2">
                         <button
+                          onClick={() => generateReceiptPDF(tracking)}
+                          className="text-purple-600 hover:text-purple-900"
+                          title="Download Receipt"
+                        >
+                          <FileText className="h-4 w-4" />
+                        </button>
+                        <button
                           onClick={() => {
                             setSelectedTracking(tracking);
                             setShowDetailsModal(true);
@@ -354,6 +413,16 @@ export default function AdminTrackingDashboard() {
         isOpen={showCreateModal}
         onClose={() => setShowCreateModal(false)}
         onSubmit={handleCreateTracking}
+      />
+      
+      <UpdateTrackingModal
+        isOpen={showUpdateModal}
+        onClose={() => {
+          setShowUpdateModal(false);
+          setSelectedTracking(null);
+        }}
+        tracking={selectedTracking}
+        onSubmit={handleUpdateStatus}
       />
     </div>
   );

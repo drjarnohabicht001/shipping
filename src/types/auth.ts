@@ -39,6 +39,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     { resource: 'projects', actions: ['create', 'read', 'update', 'delete'] },
     { resource: 'audit', actions: ['read'] },
     { resource: 'export', actions: ['create'] },
+    { resource: 'quotes', actions: ['create', 'read', 'update', 'delete'] },
     { resource: 'settings', actions: ['read', 'update'] }
   ],
   [UserRole.USER]: [

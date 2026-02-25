@@ -5,6 +5,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 //import Footer from "./components/Footer";
 import { ToastProvider } from "@/Components/toast";
 import { AuthProvider } from "@/contexts/AuthContext";
+import ChatButtonWrapper from "@/components/chat/ChatButtonWrapper";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -36,6 +37,9 @@ export default function RootLayout({
             <main>
               {children}
             </main>
+            
+            {/* Floating Chat Button */}
+            <ChatButtonWrapper />
            
           </ToastProvider>
         </AuthProvider>

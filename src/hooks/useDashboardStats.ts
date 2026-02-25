@@ -60,32 +60,57 @@ export const useDashboardStats = (
 
   const trackingService = FirestoreTrackingService.getInstance();
 
+  // Helper function to safely convert Firestore Timestamp to Date
+  const toDate = useCallback((timestamp: any): Date | null => {
+    if (!timestamp) return null;
+
+    // Check if it's a Firestore Timestamp with toDate method
+    if (timestamp && typeof timestamp.toDate === 'function') {
+      return timestamp.toDate();
+    }
+
+    // Check if it's already a Date object
+    if (timestamp instanceof Date) {
+      return timestamp;
+    }
+
+    // Check if it has seconds property (Firestore Timestamp structure)
+    if (timestamp && typeof timestamp.seconds === 'number') {
+      return new Date(timestamp.seconds * 1000);
+    }
+
+    return null;
+  }, []);
+
   // Calculate statistics from tracking items
   const calculateStats = useCallback((items: FirestoreTrackingItem[]): DashboardStats => {
     const total = items.length;
     const pending = items.filter(item => item.status === TrackingStatus.PENDING).length;
-    const inTransit = items.filter(item => 
-      item.status === TrackingStatus.IN_TRANSIT || 
+    const inTransit = items.filter(item =>
+      item.status === TrackingStatus.IN_TRANSIT ||
       item.status === TrackingStatus.OUT_FOR_DELIVERY
     ).length;
     const delivered = items.filter(item => item.status === TrackingStatus.DELIVERED).length;
-    const failed = items.filter(item => 
-      item.status === TrackingStatus.FAILED_DELIVERY || 
+    const failed = items.filter(item =>
+      item.status === TrackingStatus.FAILED_DELIVERY ||
       item.status === TrackingStatus.CANCELLED
     ).length;
 
     // Calculate average delivery time for delivered items
-    const deliveredItems = items.filter(item => 
-      item.status === TrackingStatus.DELIVERED && 
-      item.actualDeliveryDate && 
+    const deliveredItems = items.filter(item =>
+      item.status === TrackingStatus.DELIVERED &&
+      item.actualDeliveryDate &&
       item.createdAt
     );
-    
+
     let averageDeliveryTime = 0;
     if (deliveredItems.length > 0) {
       const totalDeliveryTime = deliveredItems.reduce((sum, item) => {
-        const createdDate = item.createdAt.toDate();
-        const deliveredDate = item.actualDeliveryDate!.toDate();
+        const createdDate = toDate(item.createdAt);
+        const deliveredDate = toDate(item.actualDeliveryDate);
+
+        if (!createdDate || !deliveredDate) return sum;
+
         const deliveryTime = (deliveredDate.getTime() - createdDate.getTime()) / (1000 * 60 * 60 * 24);
         return sum + deliveryTime;
       }, 0);
@@ -97,8 +122,11 @@ export const useDashboardStats = (
     let onTimeDeliveryRate = 0;
     if (itemsWithEstimatedDelivery.length > 0) {
       const onTimeDeliveries = itemsWithEstimatedDelivery.filter(item => {
-        const actualDate = item.actualDeliveryDate!.toDate();
-        const estimatedDate = item.estimatedDeliveryDate!.toDate();
+        const actualDate = toDate(item.actualDeliveryDate);
+        const estimatedDate = toDate(item.estimatedDeliveryDate);
+
+        if (!actualDate || !estimatedDate) return false;
+
         return actualDate <= estimatedDate;
       }).length;
       onTimeDeliveryRate = (onTimeDeliveries / itemsWithEstimatedDelivery.length) * 100;
@@ -113,7 +141,7 @@ export const useDashboardStats = (
       averageDeliveryTime,
       onTimeDeliveryRate
     };
-  }, []);
+  }, [toDate]);
 
   // Calculate status distribution
   const calculateStatusDistribution = useCallback((items: FirestoreTrackingItem[]): StatusDistribution[] => {
@@ -136,14 +164,38 @@ export const useDashboardStats = (
   const getRecentTrackings = useCallback((items: FirestoreTrackingItem[]): RecentTracking[] => {
     return items
       .slice(0, 10) // Get latest 10 items
-      .map(item => ({
-        id: item.id,
-        trackingNumber: item.trackingId,
-        status: item.status,
-        destination: `${item.recipient.address.city}, ${item.recipient.address.state}`,
-        lastUpdate: item.updatedAt.toDate().toLocaleDateString(),
-        estimatedDelivery: item.estimatedDeliveryDate?.toDate().toLocaleDateString()
-      }));
+      .map(item => {
+        // Safely convert Timestamp to Date
+        const getDateString = (timestamp: any): string => {
+          if (!timestamp) return 'N/A';
+
+          // Check if it's a Firestore Timestamp with toDate method
+          if (timestamp && typeof timestamp.toDate === 'function') {
+            return timestamp.toDate().toLocaleDateString();
+          }
+
+          // Check if it's already a Date object
+          if (timestamp instanceof Date) {
+            return timestamp.toLocaleDateString();
+          }
+
+          // Check if it has seconds property (Firestore Timestamp structure)
+          if (timestamp && typeof timestamp.seconds === 'number') {
+            return new Date(timestamp.seconds * 1000).toLocaleDateString();
+          }
+
+          return 'N/A';
+        };
+
+        return {
+          id: item.id,
+          trackingNumber: item.trackingId,
+          status: item.status,
+          destination: `${item.recipient.address.city}, ${item.recipient.address.state}`,
+          lastUpdate: getDateString(item.updatedAt),
+          estimatedDelivery: item.estimatedDeliveryDate ? getDateString(item.estimatedDeliveryDate) : undefined
+        };
+      });
   }, []);
 
   // Calculate performance metrics with trends
@@ -158,15 +210,15 @@ export const useDashboardStats = (
       };
     };
 
-    const deliveryTimeTrend = previousStats ? 
-      getTrend(currentStats.averageDeliveryTime, previousStats.averageDeliveryTime) : 
-      { trend: 'stable' as const, trendValue: 0 };
-    
-    const onTimeRateTrend = previousStats ? 
-      getTrend(currentStats.onTimeDeliveryRate, previousStats.onTimeDeliveryRate) : 
+    const deliveryTimeTrend = previousStats ?
+      getTrend(currentStats.averageDeliveryTime, previousStats.averageDeliveryTime) :
       { trend: 'stable' as const, trendValue: 0 };
 
-    const successRateTrend = previousStats && currentStats.total > 0 ? 
+    const onTimeRateTrend = previousStats ?
+      getTrend(currentStats.onTimeDeliveryRate, previousStats.onTimeDeliveryRate) :
+      { trend: 'stable' as const, trendValue: 0 };
+
+    const successRateTrend = previousStats && currentStats.total > 0 ?
       getTrend(
         (currentStats.delivered / currentStats.total) * 100,
         (previousStats.delivered / previousStats.total) * 100

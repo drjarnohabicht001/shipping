@@ -83,8 +83,7 @@ service cloud.firestore {
       allow read: if true;
       
       // Only authenticated admins can create, update, or delete tracking items
-      allow create: if isDevelopmentMode() || (isAuthenticated() && isAdminUser());
-      allow update: if isDevelopmentMode() || (isAuthenticated() && isAdminUser());
+      allow create, update: if isDevelopmentMode() || (isAuthenticated() && isAdminUser());
       allow delete: if isDevelopmentMode() || (isAuthenticated() && isSuperAdmin());
     }
 
@@ -113,11 +112,7 @@ service cloud.firestore {
     // System Counters Collection (for tracking ID generation)
     match /system_counters/{counterId} {
       // Only admins can read counters
-      allow read: if isDevelopmentMode() || (isAuthenticated() && isAdminUser());
-      
-      // Only system/admins can update counters
-      allow create: if isDevelopmentMode() || (isAuthenticated() && isAdminUser());
-      allow update: if isDevelopmentMode() || (isAuthenticated() && isAdminUser());
+      allow read, create, update: if isDevelopmentMode() || (isAuthenticated() && isAdminUser());
       allow delete: if isDevelopmentMode() || (isAuthenticated() && isSuperAdmin());
     }
 
@@ -157,6 +152,43 @@ service cloud.firestore {
     match /reports/{reportId} {
       allow read, create: if isAdminUser();
       allow update, delete: if isSuperAdmin();
+    }
+
+    // Quotes Collection
+    match /quotes/{quoteId} {
+      // Allow public creation of quotes
+      allow create: if true;
+      
+      // TEMPORARY: Allow public read access for development
+      // TODO: Revert to authenticated access before production deployment
+      allow read: if true;
+      
+      // Only authenticated admins can update quotes
+      allow update: if isDevelopmentMode() || (isAuthenticated() && isAdminUser());
+      
+      // Only super admins can delete quotes
+      allow delete: if isDevelopmentMode() || (isAuthenticated() && isSuperAdmin());
+    }
+
+    // Chat System Rules
+    match /chat_conversations/{conversationId} {
+      // Allow public access to enable unauthenticated user chat
+      allow create: if true;
+      allow read: if true;
+      allow update: if true;
+      
+      // Restrict deletion to admins
+      allow delete: if isDevelopmentMode() || (isAuthenticated() && isAdminUser());
+    }
+
+    match /chat_messages/{messageId} {
+      // Allow public access for real-time chat
+      allow create: if true;
+      allow read: if true;
+      allow update: if true;
+      
+      // Restrict deletion to admins
+      allow delete: if isDevelopmentMode() || (isAuthenticated() && isAdminUser());
     }
 
     // Fallback rule - Deny all other access

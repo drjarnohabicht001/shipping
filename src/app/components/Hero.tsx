@@ -33,12 +33,14 @@ export default function Hero() {
                         </h3>
 
                         <div className="flex flex-col gap-4 sm:flex-row sm:items-center w-full">
+                            <Link href="/quote">
                             <Button
                                 variant="primary"
                                 className="px-8 py-3 text-lg rounded-full hover:bg-[#2E3135] transition-colors duration-300"
                             >
                                 GET A QUOTE
                             </Button>
+                            </Link>
                             <Link href="/track">
                             <Button
                                 variant="outline"

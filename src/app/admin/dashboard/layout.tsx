@@ -16,7 +16,8 @@ import {
   Search,
   User,
   Download,
-  FileText
+  FileText,
+  MessageCircle
 } from 'lucide-react';
 import { Button } from '@/Components/Button';
 import Logo from '../../../../public/svg/logo';
@@ -32,6 +33,8 @@ const navigation: NavigationItem[] = [
   { name: 'Dashboard', href: '/admin/dashboard', icon: LayoutDashboard },
   // { name: 'Projects', href: '/admin/dashboard/projects', icon: Package, permission: 'projects.read' },
   { name: 'Tracking', href: '/admin/dashboard/tracking', icon: BarChart3, permission: 'tracking.read' },
+  { name: 'Quotes', href: '/admin/dashboard/quotes', icon: Package, permission: 'quotes.read' },
+  { name: 'Messages', href: '/admin/messages', icon: MessageCircle },
   { name: 'Users', href: '/admin/dashboard/users', icon: Users, permission: 'users.read' },
   //{ name: 'Audit Logs', href: '/admin/dashboard/audit', icon: FileText, permission: 'audit.read' },
   //{ name: 'Data Export', href: '/admin/dashboard/export', icon: Download, permission: 'read' },

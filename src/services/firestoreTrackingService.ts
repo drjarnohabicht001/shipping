@@ -1,32 +1,35 @@
-import { 
-  collection, 
-  doc, 
-  addDoc, 
-  getDoc, 
-  getDocs, 
-  updateDoc, 
-  deleteDoc, 
-  query, 
-  where, 
-  orderBy, 
-  limit, 
-  onSnapshot, 
+import {
+  collection,
+  doc,
+  addDoc,
+  getDoc,
+  getDocs,
+  updateDoc,
+  deleteDoc,
+  query,
+  where,
+  orderBy,
+  limit,
+  onSnapshot,
   Timestamp,
   writeBatch,
   increment
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { 
-  FirestoreTrackingItem, 
-  TrackingStatusUpdate, 
-  TrackingStatus, 
-  FIRESTORE_COLLECTIONS 
+import {
+  FirestoreTrackingItem,
+  TrackingStatusUpdate,
+  TrackingStatus,
+  FIRESTORE_COLLECTIONS
 } from '@/lib/firestore-schema';
 
 export interface CreateTrackingItemRequest {
   itemName: string;
   itemDescription?: string;
   itemValue?: number;
+  cost?: number;
+  vat?: number;
+  tax?: number;
   itemCategory?: string;
   weight?: number;
   dimensions?: {
@@ -94,6 +97,7 @@ export interface UpdateTrackingStatusRequest {
   isPublic?: boolean;
   notes?: string;
   updatedBy: string;
+  estimatedDeliveryDate?: Date;
 }
 
 export interface TrackingSearchFilters {
@@ -112,7 +116,7 @@ class FirestoreTrackingService {
   private static instance: FirestoreTrackingService;
   private trackingCounterDoc = 'tracking_counter';
 
-  private constructor() {}
+  private constructor() { }
 
   public static getInstance(): FirestoreTrackingService {
     if (!FirestoreTrackingService.instance) {
@@ -128,22 +132,22 @@ class FirestoreTrackingService {
   private async generateTrackingId(): Promise<string> {
     const year = new Date().getFullYear();
     const counterRef = doc(db, 'system_counters', this.trackingCounterDoc);
-    
+
     try {
       // Get current counter value
       const counterDoc = await getDoc(counterRef);
       let nextNumber = 1;
-      
+
       if (counterDoc.exists()) {
         nextNumber = (counterDoc.data().value || 0) + 1;
       }
-      
+
       // Update counter atomically
       await updateDoc(counterRef, {
         value: increment(1),
         lastUpdated: Timestamp.now()
       });
-      
+
       // Format: SH-2024-000001
       const paddedNumber = nextNumber.toString().padStart(6, '0');
       return `SH-${year}-${paddedNumber}`;
@@ -191,7 +195,7 @@ class FirestoreTrackingService {
    */
   private calculateShippingCost(request: CreateTrackingItemRequest): number {
     let baseCost = 10; // Base cost in USD
-    
+
     // Weight-based pricing
     if (request.weight) {
       baseCost += request.weight * 2;
@@ -267,7 +271,9 @@ class FirestoreTrackingService {
         estimatedDeliveryDate: estimatedDelivery,
         deliveryInstructions: request.deliveryInstructions,
         signatureRequired: request.signatureRequired || false,
-        cost,
+        cost: request.cost || cost, // Use provided cost if available
+        vat: request.vat,
+        tax: request.tax,
         currency: 'USD',
         paymentStatus: 'pending',
         createdAt: now,
@@ -294,7 +300,7 @@ class FirestoreTrackingService {
       ) as Omit<FirestoreTrackingItem, 'id'>;
 
       const docRef = await addDoc(collection(db, FIRESTORE_COLLECTIONS.TRACKING_ITEMS), trackingItem);
-      
+
       return {
         id: docRef.id,
         ...trackingItem
@@ -315,13 +321,13 @@ class FirestoreTrackingService {
         where('trackingId', '==', trackingId),
         limit(1)
       );
-      
+
       const querySnapshot = await getDocs(q);
-      
+
       if (querySnapshot.empty) {
         return null;
       }
-      
+
       const doc = querySnapshot.docs[0];
       return {
         id: doc.id,
@@ -334,38 +340,120 @@ class FirestoreTrackingService {
   }
 
   /**
+   * Helper function to remove undefined values from an object
+   */
+  private removeUndefinedValues(obj: any): any {
+    if (obj === null || obj === undefined) {
+      return obj;
+    }
+
+    if (Array.isArray(obj)) {
+      return obj.map(item => this.removeUndefinedValues(item));
+    }
+
+    if (typeof obj === 'object') {
+      const cleaned: any = {};
+      for (const key in obj) {
+        if (obj.hasOwnProperty(key) && obj[key] !== undefined) {
+          cleaned[key] = this.removeUndefinedValues(obj[key]);
+        }
+      }
+      return cleaned;
+    }
+
+    return obj;
+  }
+
+  /**
    * Update tracking status
    */
   async updateTrackingStatus(request: UpdateTrackingStatusRequest): Promise<void> {
     try {
       const trackingItem = await this.getTrackingByTrackingId(request.trackingId);
-      
+
       if (!trackingItem) {
         throw new Error('Tracking item not found');
       }
 
       const now = Timestamp.now();
-      const statusUpdate: TrackingStatusUpdate = {
+
+      // Build status update, removing undefined values
+      const statusUpdateData: any = {
         id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         status: request.status,
         timestamp: now,
-        location: request.location,
         description: request.description,
         updatedBy: request.updatedBy,
-        isPublic: request.isPublic !== false, // Default to true
-        notes: request.notes
+        isPublic: request.isPublic !== false
       };
 
-      const updateData: Partial<FirestoreTrackingItem> = {
+      // Only add location if it exists and has required fields
+      if (request.location && request.location.city && request.location.country) {
+        const locationData: any = {
+          city: request.location.city,
+          country: request.location.country
+        };
+        if (request.location.state) {
+          locationData.state = request.location.state;
+        }
+        if (request.location.facility) {
+          locationData.facility = request.location.facility;
+        }
+        if (request.location.coordinates &&
+          typeof request.location.coordinates.latitude === 'number' &&
+          typeof request.location.coordinates.longitude === 'number' &&
+          !isNaN(request.location.coordinates.latitude) &&
+          !isNaN(request.location.coordinates.longitude)) {
+          locationData.coordinates = {
+            latitude: request.location.coordinates.latitude,
+            longitude: request.location.coordinates.longitude
+          };
+        }
+        statusUpdateData.location = locationData;
+      }
+
+      // Only add notes if provided
+      if (request.notes) {
+        statusUpdateData.notes = request.notes;
+      }
+
+      const statusUpdate: TrackingStatusUpdate = statusUpdateData as TrackingStatusUpdate;
+
+      // Ensure statusHistory exists and clean it
+      const existingHistory = trackingItem.statusHistory || [];
+      // Clean existing history entries to remove any undefined values
+      const cleanedHistory = existingHistory.map(entry => this.removeUndefinedValues(entry));
+
+      const updateData: any = {
         status: request.status,
         updatedAt: now,
         lastUpdatedBy: request.updatedBy,
-        statusHistory: [...trackingItem.statusHistory, statusUpdate]
+        statusHistory: [...cleanedHistory, statusUpdate]
       };
 
-      // Update current location if provided
-      if (request.location) {
-        updateData.currentLocation = request.location;
+      // Update current location if provided and valid
+      if (request.location && request.location.city && request.location.country) {
+        const locationData: any = {
+          city: request.location.city,
+          country: request.location.country
+        };
+        if (request.location.state) {
+          locationData.state = request.location.state;
+        }
+        if (request.location.facility) {
+          locationData.facility = request.location.facility;
+        }
+        if (request.location.coordinates &&
+          typeof request.location.coordinates.latitude === 'number' &&
+          typeof request.location.coordinates.longitude === 'number' &&
+          !isNaN(request.location.coordinates.latitude) &&
+          !isNaN(request.location.coordinates.longitude)) {
+          locationData.coordinates = {
+            latitude: request.location.coordinates.latitude,
+            longitude: request.location.coordinates.longitude
+          };
+        }
+        updateData.currentLocation = locationData;
       }
 
       // Set delivery timestamp if delivered
@@ -379,11 +467,21 @@ class FirestoreTrackingService {
         updateData.pickedUpAt = now;
       }
 
+      // Update estimated delivery date if provided
+      if (request.estimatedDeliveryDate) {
+        updateData.estimatedDeliveryDate = Timestamp.fromDate(request.estimatedDeliveryDate);
+      }
+
+      // Remove all undefined values before sending to Firestore
+      const cleanedUpdateData = this.removeUndefinedValues(updateData);
+
       const docRef = doc(db, FIRESTORE_COLLECTIONS.TRACKING_ITEMS, trackingItem.id);
-      await updateDoc(docRef, updateData);
-    } catch (error) {
+      await updateDoc(docRef, cleanedUpdateData);
+    } catch (error: any) {
       console.error('Error updating tracking status:', error);
-      throw new Error('Failed to update tracking status');
+      // Provide more detailed error message
+      const errorMessage = error?.message || 'Unknown error occurred';
+      throw new Error(`Failed to update tracking status: ${errorMessage}`);
     }
   }
 
@@ -425,7 +523,7 @@ class FirestoreTrackingService {
 
       if (filters.searchQuery) {
         const searchLower = filters.searchQuery.toLowerCase();
-        filteredItems = filteredItems.filter(item => 
+        filteredItems = filteredItems.filter(item =>
           item.trackingId.toLowerCase().includes(searchLower) ||
           item.itemName.toLowerCase().includes(searchLower) ||
           item.sender.name.toLowerCase().includes(searchLower) ||
@@ -434,13 +532,13 @@ class FirestoreTrackingService {
       }
 
       if (filters.priority && filters.priority.length > 0) {
-        filteredItems = filteredItems.filter(item => 
+        filteredItems = filteredItems.filter(item =>
           filters.priority!.includes(item.priority)
         );
       }
 
       if (filters.serviceType && filters.serviceType.length > 0) {
-        filteredItems = filteredItems.filter(item => 
+        filteredItems = filteredItems.filter(item =>
           filters.serviceType!.includes(item.serviceType)
         );
       }
@@ -456,7 +554,7 @@ class FirestoreTrackingService {
    * Subscribe to real-time updates for a tracking item
    */
   subscribeToTrackingUpdates(
-    trackingId: string, 
+    trackingId: string,
     callback: (trackingItem: FirestoreTrackingItem | null) => void
   ): () => void {
     const q = query(
@@ -493,10 +591,10 @@ class FirestoreTrackingService {
         collection(db, FIRESTORE_COLLECTIONS.TRACKING_ITEMS),
         orderBy('createdAt', 'desc')
       );
-      
+
       const querySnapshot = await getDocs(q);
       const trackingItems: FirestoreTrackingItem[] = [];
-      
+
       querySnapshot.forEach((doc) => {
         trackingItems.push({
           id: doc.id,
@@ -524,7 +622,7 @@ class FirestoreTrackingService {
 
     return onSnapshot(q, (querySnapshot) => {
       const trackingItems: FirestoreTrackingItem[] = [];
-      
+
       querySnapshot.forEach((doc) => {
         trackingItems.push({
           id: doc.id,
@@ -545,7 +643,7 @@ class FirestoreTrackingService {
   async deleteTrackingItem(trackingId: string): Promise<void> {
     try {
       const trackingItem = await this.getTrackingByTrackingId(trackingId);
-      
+
       if (!trackingItem) {
         throw new Error('Tracking item not found');
       }

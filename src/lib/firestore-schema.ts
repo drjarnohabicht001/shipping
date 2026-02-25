@@ -7,26 +7,26 @@ export interface FirestoreAdminUser {
   email: string;
   name: string;
   role: 'admin'; // Explicitly set to admin only
-  
+
   // Security & Authentication
   emailVerified: boolean;
   phoneNumber?: string;
   phoneVerified?: boolean;
   twoFactorEnabled: boolean;
   lastPasswordChange: Timestamp;
-  
+
   // Profile Information
   avatar?: string;
   department?: string;
   jobTitle?: string;
   employeeId?: string;
-  
+
   // Access Control & Permissions
   permissions: AdminPermission[];
   accessLevel: 'super_admin' | 'admin' | 'limited_admin';
   allowedIpRanges?: string[]; // IP whitelist for enhanced security
   sessionTimeout: number; // in minutes
-  
+
   // Activity Tracking
   createdAt: Timestamp;
   createdBy: string; // UID of admin who created this account
@@ -34,18 +34,18 @@ export interface FirestoreAdminUser {
   lastActivity?: Timestamp;
   loginAttempts: number;
   lastFailedLogin?: Timestamp;
-  
+
   // Account Status
   isActive: boolean;
   isLocked: boolean;
   lockReason?: string;
   lockedAt?: Timestamp;
   lockedBy?: string;
-  
+
   // Audit & Compliance
   auditTrail: AdminAuditEntry[];
   complianceFlags?: string[];
-  
+
   // System Metadata
   updatedAt: Timestamp;
   updatedBy: string;
@@ -111,7 +111,7 @@ export interface FirestoreTrackingItem {
   // Core Tracking Information
   id: string; // Firestore document ID
   trackingId: string; // Unique tracking code (e.g., SH-2024-ABC123)
-  
+
   // Item Details
   itemName: string;
   itemDescription?: string;
@@ -123,7 +123,7 @@ export interface FirestoreTrackingItem {
     width: number;
     height: number;
   };
-  
+
   // Sender Information
   sender: {
     name: string;
@@ -138,7 +138,7 @@ export interface FirestoreTrackingItem {
     };
     companyName?: string;
   };
-  
+
   // Recipient Information
   recipient: {
     name: string;
@@ -153,11 +153,11 @@ export interface FirestoreTrackingItem {
     };
     companyName?: string;
   };
-  
+
   // Shipping Details
   serviceType: 'standard' | 'express' | 'overnight' | 'international' | 'same_day';
   priority: 'low' | 'medium' | 'high' | 'urgent';
-  
+
   // Status and Timeline
   status: TrackingStatus;
   currentLocation?: {
@@ -170,44 +170,46 @@ export interface FirestoreTrackingItem {
       longitude: number;
     };
   };
-  
+
   // Delivery Information
   estimatedDeliveryDate: Timestamp;
   actualDeliveryDate?: Timestamp;
   deliveryInstructions?: string;
   signatureRequired: boolean;
-  
+
   // Financial Information
   cost: number;
+  vat?: number;
+  tax?: number;
   currency: string;
   paymentStatus: 'pending' | 'paid' | 'refunded' | 'cancelled';
-  
+
   // Timestamps
   createdAt: Timestamp;
   updatedAt: Timestamp;
   pickedUpAt?: Timestamp;
   deliveredAt?: Timestamp;
-  
+
   // System Information
   createdBy: string; // Admin UID who created the tracking
   lastUpdatedBy: string;
-  
+
   // Additional Features
   isFragile: boolean;
   requiresSignature: boolean;
   insuranceAmount?: number;
   specialInstructions?: string;
-  
+
   // Status History
   statusHistory: TrackingStatusUpdate[];
-  
+
   // Notifications
   notificationPreferences: {
     sms: boolean;
     email: boolean;
     push: boolean;
   };
-  
+
   // Metadata
   tags?: string[];
   notes?: string;
@@ -249,6 +251,144 @@ export enum TrackingStatus {
   DELAYED = 'delayed'
 }
 
+// Quote Schema
+export interface FirestoreQuote {
+  id: string; // Firestore document ID
+  quoteNumber: string; // Unique quote number (e.g., QT-2024-000001)
+
+  // Customer Information
+  customer: {
+    name: string;
+    email: string;
+    phone?: string;
+    company?: string;
+    address: {
+      street: string;
+      city: string;
+      state: string;
+      postalCode: string;
+      country: string;
+    };
+  };
+
+  // Shipping Details
+  origin: {
+    street: string;
+    city: string;
+    state: string;
+    postalCode: string;
+    country: string;
+  };
+
+  destination: {
+    street: string;
+    city: string;
+    state: string;
+    postalCode: string;
+    country: string;
+  };
+
+  // Item Details
+  items: {
+    description: string;
+    quantity: number;
+    weight: number; // in kg
+    dimensions?: {
+      length: number; // in cm
+      width: number;
+      height: number;
+    };
+    value?: number; // Declared value
+    category?: string;
+  }[];
+
+  // Service Options
+  serviceType: 'standard' | 'express' | 'overnight' | 'international' | 'same_day';
+  priority: 'low' | 'medium' | 'high' | 'urgent';
+
+  // Quote Details
+  status: 'pending' | 'sent' | 'accepted' | 'rejected' | 'expired';
+  estimatedCost?: number;
+  currency: string;
+  validUntil: Timestamp;
+  notes?: string;
+  adminNotes?: string; // Internal notes
+
+  // Timestamps
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+  sentAt?: Timestamp;
+  respondedAt?: Timestamp;
+
+  // System Information
+  createdBy?: string; // Admin UID if created by admin
+  lastUpdatedBy?: string;
+}
+
+// Chat System Schema
+export interface FirestoreChatConversation {
+  id: string; // Firestore document ID
+  conversationId: string; // Unique conversation ID (e.g., CHAT-2024-000001)
+
+  // User Information
+  user: {
+    name: string;
+    email: string;
+    userId: string; // Unique user identifier generated on first chat
+  };
+
+  // Conversation Status
+  status: 'active' | 'resolved' | 'archived';
+
+  // Last Message Info (for quick display in list)
+  lastMessage: {
+    text: string;
+    timestamp: Timestamp;
+    sender: 'user' | 'admin';
+  };
+
+  // Unread Count
+  unreadByAdmin: number;
+  unreadByUser: number;
+
+  // Timestamps
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+
+  // Admin Assignment
+  assignedTo?: string; // Admin UID
+
+  // Metadata
+  tags?: string[];
+  priority?: 'low' | 'medium' | 'high';
+}
+
+export interface FirestoreChatMessage {
+  id: string; // Firestore document ID
+  conversationId: string; // Reference to parent conversation
+
+  // Message Content
+  text: string;
+
+  // Sender Information
+  sender: 'user' | 'admin';
+  senderName: string;
+  senderId: string; // User ID or Admin UID
+
+  // Status
+  isRead: boolean;
+
+  // Timestamp
+  timestamp: Timestamp;
+
+  // Optional Metadata
+  attachments?: {
+    url: string;
+    type: string;
+    name: string;
+  }[];
+}
+
 // Firestore Collection Structure
 export const FIRESTORE_COLLECTIONS = {
   ADMIN_USERS: 'admin_users',
@@ -257,7 +397,10 @@ export const FIRESTORE_COLLECTIONS = {
   ADMIN_PERMISSIONS: 'admin_permissions',
   TRACKING_ITEMS: 'tracking_items',
   TRACKING_STATUS_UPDATES: 'tracking_status_updates',
-  TRACKING_NOTIFICATIONS: 'tracking_notifications'
+  TRACKING_NOTIFICATIONS: 'tracking_notifications',
+  QUOTES: 'quotes',
+  CHAT_CONVERSATIONS: 'chat_conversations',
+  CHAT_MESSAGES: 'chat_messages'
 } as const;
 
 // Security Rules Helper Types
@@ -319,22 +462,22 @@ export const DEFAULT_ADMIN_PERMISSIONS: Record<string, AdminPermission[]> = {
 // Validation helpers
 export const validateAdminUser = (user: Partial<FirestoreAdminUser>): string[] => {
   const errors: string[] = [];
-  
+
   if (!user.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(user.email)) {
     errors.push('Valid email is required');
   }
-  
+
   if (!user.name || user.name.trim().length < 2) {
     errors.push('Name must be at least 2 characters');
   }
-  
+
   if (!user.accessLevel || !['super_admin', 'admin', 'limited_admin'].includes(user.accessLevel)) {
     errors.push('Valid access level is required');
   }
-  
+
   if (!user.permissions || user.permissions.length === 0) {
     errors.push('At least one permission is required');
   }
-  
+
   return errors;
 };
