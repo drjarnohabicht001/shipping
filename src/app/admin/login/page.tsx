@@ -44,13 +44,13 @@ export default function AdminLogin() {
           </div>
 
           {/* Demo Credentials */}
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+          {/* <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
             <h3 className="text-sm font-semibold text-blue-800 mb-2">Demo Credentials:</h3>
             <div className="text-xs text-blue-700 space-y-1">
               <div><strong>Super Admin:</strong> admin@shipping.com / admin123</div>
               <div><strong>User:</strong> user@shipping.com / user123</div>
             </div>
-          </div>
+          </div> */}
 
           {/* Error Message */}
           {error && (
