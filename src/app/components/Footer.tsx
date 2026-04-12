@@ -60,7 +60,7 @@ export default function Footer() {
                         <h2 className="text-lg font-semibold border-b border-gray-600 pb-2">Contact Us</h2>
                         <address className="not-italic text-gray-300 space-y-2">
                             <p>1234 Street Name, City, State, 12345</p>
-                            <p>Email: contact@company.com</p>
+                            <p>Email: Support@globalbridgelogistics.eu</p>
                             <p>Phone: (123) 456-7890</p>
                             <p>Fax: (123) 456-7891</p>
                         </address>
