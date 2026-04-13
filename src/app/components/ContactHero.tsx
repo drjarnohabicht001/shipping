@@ -44,10 +44,10 @@ export default function ContactHero() {
                                 Give us a call
                             </p>
                             <a
-                                href="tel:+090023367811"
+                                href="tel:+447511608235"
                                 className="text-2xl font-bold text-white hover:text-[#FF5824] transition-colors flex items-center gap-2"
                             >
-                                +0900 2336 7811
+                               (+44) 7511-608235
                             </a>
                         </div>
                     </div>

@@ -4,8 +4,8 @@ import { FooterLogo } from "../../../public/svg/footerlogo"
 export default function Footer() {
     return (
         <footer className="bg-[#282A2C] text-white pt-12 pb-6 px-4 sm:px-6 lg:px-8">
-            <div className="container mx-auto">         
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 mb-12">     
+            <div className="container mx-auto">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 mb-12">
                     <div className="space-y-4">
                         <div className="mb-4">
                             <FooterLogo />
@@ -13,26 +13,26 @@ export default function Footer() {
                         <p className="text-gray-300">
                             Providing reliable moving and freight services since 2010. We make your relocation seamless and stress-free.
                         </p>
-                        <div className="flex space-x-4">
+                        {/* <div className="flex space-x-4">
                             <a href="#" className="text-gray-300 hover:text-white transition-colors">
-                                <Facebook  />
+                                <Facebook />
                             </a>
                             <a href="#" className="text-gray-300 hover:text-white transition-colors">
-                                <Twitter  />
+                                <Twitter />
                             </a>
                             <a href="#" className="text-gray-300 hover:text-white transition-colors">
-                                <Instagram  />
+                                <Instagram />
                             </a>
                             <a href="#" className="text-gray-300 hover:text-white transition-colors">
-                                <Linkedin  />
+                                <Linkedin />
                             </a>
                             <a href="#" className="text-gray-300 hover:text-white transition-colors">
-                                <Youtube  />
+                                <Youtube />
                             </a>
-                        </div>
+                        </div> */}
                     </div>
 
-      
+
                     <div className="space-y-4">
                         <h2 className="text-lg font-semibold border-b border-gray-600 pb-2">Quick Links</h2>
                         <ul className="space-y-2">
@@ -44,7 +44,7 @@ export default function Footer() {
                         </ul>
                     </div>
 
-           
+
                     <div className="space-y-4">
                         <h2 className="text-lg font-semibold border-b border-gray-600 pb-2">Our Services</h2>
                         <ul className="space-y-2">
@@ -59,10 +59,10 @@ export default function Footer() {
                     <div className="space-y-4">
                         <h2 className="text-lg font-semibold border-b border-gray-600 pb-2">Contact Us</h2>
                         <address className="not-italic text-gray-300 space-y-2">
-                            <p>1234 Street Name, City, State, 12345</p>
+                            <p>72 Princes Street, Romaldkirk, United Kingdom</p>
                             <p>Email: Support@globalbridgelogistics.eu</p>
-                            <p>Phone: (123) 456-7890</p>
-                            <p>Fax: (123) 456-7891</p>
+                            <p>Phone: (+44) 7511-608235</p>
+                            {/* <p>Fax: (123) 456-7891</p> */}
                         </address>
                         <div className="pt-2">
                             <button className="bg-white text-[#282A2C] px-4 py-2 rounded hover:bg-gray-200 transition-colors font-medium">

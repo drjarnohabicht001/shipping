@@ -6,7 +6,7 @@ const contactItems = [
   {
     icon: <MapPin className="text-[#FF5824]" size={24} />,
     title: "Address",
-    content: "14960 Florence Trail\nApple Valley, MN 55124"
+    content: "72 Princes Street, Romaldkirk, United Kingdom"
   },
   {
     icon: <Clock className="text-[#FF5824]" size={24} />,
@@ -16,14 +16,14 @@ const contactItems = [
   {
     icon: <Mail className="text-[#FF5824]" size={24} />,
     title: "Email",
-    content: "hello@logistics.com",
-    link: "mailto:hello@logistics.com"
+    content: "Support@globalbridgelogistics.eu",
+    link: "mailto:Support@globalbridgelogistics.eu"
   },
   {
     icon: <Phone className="text-[#FF5824]" size={24} />,
     title: "Phone",
-    content: "+1 (555) 123-4567",
-    link: "tel:+15551234567"
+    content: "(+44) 7511-608235",
+    link: "tel:+447511608235"
   }
 ]
 
