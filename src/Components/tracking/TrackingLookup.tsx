@@ -5,6 +5,8 @@ import { Search, Package, MapPin, Clock, CheckCircle, AlertCircle, Truck, Calend
 import { useTrackingUpdates } from '@/hooks/useTrackingUpdates';
 import { TrackingStatus } from '@/lib/firestore-schema';
 import { useAuth } from '@/contexts/AuthContext';
+import ShipmentProgress from './ShipmentProgress';
+import LiveMap from './LiveMap';
 
 interface TrackingLookupProps {
   className?: string;
@@ -215,6 +217,14 @@ const TrackingLookup: React.FC<TrackingLookupProps> = ({ className = '' }) => {
               </div>
             </div>
           </div>
+
+          {/* Shipment Progress */}
+          <ShipmentProgress status={trackingItem.status} />
+
+          {/* Live Map */}
+          {trackingItem.currentLocation && (
+            <LiveMap location={trackingItem.currentLocation as any} />
+          )}
 
           {/* Delivery Information */}
           <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-100">

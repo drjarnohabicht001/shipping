@@ -642,17 +642,28 @@ class FirestoreTrackingService {
    */
   async deleteTrackingItem(trackingId: string): Promise<void> {
     try {
+      // 1. Try to find by the friendly trackingId field (e.g. SH-2024-000001)
       const trackingItem = await this.getTrackingByTrackingId(trackingId);
 
-      if (!trackingItem) {
-        throw new Error('Tracking item not found');
+      if (trackingItem) {
+        const docRef = doc(db, FIRESTORE_COLLECTIONS.TRACKING_ITEMS, trackingItem.id);
+        await deleteDoc(docRef);
+        return;
       }
 
-      const docRef = doc(db, FIRESTORE_COLLECTIONS.TRACKING_ITEMS, trackingItem.id);
+      // 2. Fallback: treat the argument as a raw Firestore document ID
+      const docRef = doc(db, FIRESTORE_COLLECTIONS.TRACKING_ITEMS, trackingId);
+      const docSnap = await getDoc(docRef);
+
+      if (!docSnap.exists()) {
+        throw new Error(`Tracking item not found (id: ${trackingId})`);
+      }
+
       await deleteDoc(docRef);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error deleting tracking item:', error);
-      throw new Error('Failed to delete tracking item');
+      // Preserve the original error message instead of swallowing it
+      throw new Error(error?.message ?? 'Failed to delete tracking item');
     }
   }
 }

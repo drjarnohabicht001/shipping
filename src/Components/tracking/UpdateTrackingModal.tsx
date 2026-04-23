@@ -61,12 +61,26 @@ const UpdateTrackingModal: React.FC<UpdateTrackingModalProps> = ({
     if (tracking) {
       let estimatedDate = "";
       if (tracking.estimatedDeliveryDate) {
-        const date = tracking.estimatedDeliveryDate.toDate
-          ? tracking.estimatedDeliveryDate.toDate()
-          : tracking.estimatedDeliveryDate instanceof Date
-            ? tracking.estimatedDeliveryDate
-            : new Date(tracking.estimatedDeliveryDate as any);
-        estimatedDate = date.toISOString().split("T")[0];
+        let date: Date;
+        const raw = tracking.estimatedDeliveryDate as any;
+        if (typeof raw.toDate === "function") {
+          // Firestore Timestamp instance
+          date = raw.toDate();
+        } else if (raw instanceof Date) {
+          date = raw;
+        } else if (
+          raw &&
+          typeof raw === "object" &&
+          typeof raw.seconds === "number"
+        ) {
+          // Serialized Firestore Timestamp plain object: { seconds, nanoseconds }
+          date = new Date(raw.seconds * 1000);
+        } else {
+          date = new Date(raw);
+        }
+        if (!isNaN(date.getTime())) {
+          estimatedDate = date.toISOString().split("T")[0];
+        }
       }
 
       setFormData({
