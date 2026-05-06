@@ -1,6 +1,5 @@
 const { initializeApp } = require('firebase/app');
 const { getFirestore, collection, addDoc, Timestamp } = require('firebase/firestore');
-const { getAuth, signInAnonymously } = require('firebase/auth');
 
 // Firebase configuration
 const firebaseConfig = {
@@ -14,8 +13,7 @@ const firebaseConfig = {
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
-const auth = getAuth(app);
+getFirestore(app);
 
 // Default permissions for super admin
 const DEFAULT_SUPER_ADMIN_PERMISSIONS = [
@@ -41,54 +39,9 @@ const DEFAULT_SUPER_ADMIN_PERMISSIONS = [
 
 async function createSeedAdmin() {
   try {
-    console.log('Creating seed admin user...');
-
-    const now = Timestamp.now();
-    const seedAdminData = {
-      uid: '', // Will be set after document creation
-      email: 'admin@shipping.com',
-      name: 'System Administrator',
-      role: 'admin',
-      accessLevel: 'super_admin',
-      emailVerified: true,
-      twoFactorEnabled: false,
-      lastPasswordChange: now,
-      permissions: DEFAULT_SUPER_ADMIN_PERMISSIONS,
-      sessionTimeout: 480, // 8 hours
-      isActive: true,
-      isLocked: false,
-      loginAttempts: 0,
-      department: 'IT',
-      jobTitle: 'System Administrator',
-      employeeId: 'SYS001',
-      createdAt: now,
-      updatedAt: now,
-      createdBy: 'system',
-      updatedBy: 'system',
-      version: 1,
-      auditTrail: [{
-        id: crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36),
-        action: 'ADMIN_USER_CREATED',
-        timestamp: now,
-        details: { createdBy: 'system', reason: 'Initial seed admin' },
-        severity: 'medium'
-      }]
-    };
-
-    // Create the document
-    const docRef = await addDoc(collection(db, 'admin_users'), seedAdminData);
-    
-    // Update with the document ID as uid
-    const { updateDoc, doc } = require('firebase/firestore');
-    await updateDoc(doc(db, 'admin_users', docRef.id), { uid: docRef.id });
-    
-    console.log('✅ Seed admin user created successfully!');
-    console.log('📧 Email: admin@shipping.com');
-    console.log('🆔 UID:', docRef.id);
-    console.log('🔑 Access Level: super_admin');
-    console.log('');
-    console.log('You can now use this admin user to create other admin users through the UI.');
-    
+    throw new Error(
+      'Deprecated insecure script. Use scripts/seed-admin.mjs with environment variables and Firebase Auth bootstrap instead.'
+    );
   } catch (error) {
     console.error('❌ Error creating seed admin:', error);
   }

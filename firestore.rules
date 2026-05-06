@@ -2,197 +2,181 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // Helper functions for admin user security
     function isAuthenticated() {
       return request.auth != null;
     }
-    
-    // Temporary development function - allows access during development
-    function isDevelopmentMode() {
-      return true; // Set to false in production
-    }
-    
-    function isAdminUser() {
-      return isDevelopmentMode() || 
-             (isAuthenticated() && 
-             exists(/databases/$(database)/documents/admin_users/$(request.auth.uid)) &&
-             get(/databases/$(database)/documents/admin_users/$(request.auth.uid)).data.role == 'admin' &&
-             get(/databases/$(database)/documents/admin_users/$(request.auth.uid)).data.isActive == true &&
-             get(/databases/$(database)/documents/admin_users/$(request.auth.uid)).data.isLocked == false);
-    }
-    
-    function hasAdminPermission(resource, action) {
-      return isAdminUser() && 
-             resource in get(/databases/$(database)/documents/admin_users/$(request.auth.uid)).data.permissions &&
-             action in get(/databases/$(database)/documents/admin_users/$(request.auth.uid)).data.permissions[resource];
-    }
-    
-    function isSuperAdmin() {
-      return isAdminUser() && 
-             get(/databases/$(database)/documents/admin_users/$(request.auth.uid)).data.accessLevel == 'super_admin';
-    }
-    
-    function isOwnerOrSuperAdmin(userId) {
-      return isAuthenticated() && (request.auth.uid == userId || isSuperAdmin());
+
+    function adminDocPath(uid) {
+      return /databases/$(database)/documents/admin_users/$(uid);
     }
 
-    // Admin Users Collection - Highly Restricted
+    function adminDoc() {
+      return get(adminDocPath(request.auth.uid));
+    }
+
+    function isAdminUser() {
+      return isAuthenticated() &&
+        exists(adminDocPath(request.auth.uid)) &&
+        adminDoc().data.role == 'admin' &&
+        adminDoc().data.isActive == true &&
+        adminDoc().data.isLocked == false;
+    }
+
+    function isSuperAdmin() {
+      return isAdminUser() &&
+        adminDoc().data.accessLevel == 'super_admin';
+    }
+
+    function isOwnAdminProfile(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isConversationParticipant() {
+      return isAuthenticated() &&
+        resource.data.participantUid == request.auth.uid;
+    }
+
+    // Admin Users Collection - locked down to authenticated admin identities only.
+    // Initial bootstrap should happen out-of-band with Firebase Admin SDK or console access.
     match /admin_users/{userId} {
-      // Allow seed admin creation (temporary for bootstrapping)
-      // Allow creation in development mode for testing
-      allow create: if isDevelopmentMode() ||
-                      (isSuperAdmin() && 
-                       request.resource.data.role == 'admin' &&
-                       request.resource.data.createdBy == request.auth.uid) ||
-                      (request.resource.data.createdBy == 'system' && 
-                       request.resource.data.email == 'admin@shipping.com');
-      
-      // Allow update for setting UID after creation
-      // Allow updates in development mode for testing
-      allow update: if isDevelopmentMode() ||
-                      (resource.data.createdBy == 'system' && 
-                       request.resource.data.diff(resource.data).affectedKeys().hasOnly(['uid']));
-      
-      // Admin users can read their own data, super admins can read all
-      // Authenticated users can query (needed for email check during creation)
-      // Allow reading in development mode for auth bootstrapping
-      allow read: if isDevelopmentMode() || isAuthenticated();
-      
-      // Only super admins can update other admin users, users can update limited fields of their own data
-      allow update: if (request.auth.uid == userId && 
-                        // Users can only update these fields for themselves
-                        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastActivity', 'avatar', 'name']) &&
-                        request.resource.data.role == resource.data.role &&
-                        request.resource.data.accessLevel == resource.data.accessLevel) ||
-                       (isSuperAdmin() && request.auth.uid != userId); // Super admins can update others but not themselves
-      
-      // Only super admins can delete admin users (soft delete recommended)
+      allow create: if isSuperAdmin() &&
+        request.resource.data.role == 'admin' &&
+        request.resource.data.createdBy == request.auth.uid;
+
+      allow get: if isOwnAdminProfile(userId) || isSuperAdmin();
+      allow list: if isSuperAdmin();
+
+      allow update: if
+        (
+          isOwnAdminProfile(userId) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'lastActivity',
+            'lastLogin',
+            'loginAttempts',
+            'avatar',
+            'name'
+          ]) &&
+          request.resource.data.role == resource.data.role &&
+          request.resource.data.accessLevel == resource.data.accessLevel &&
+          request.resource.data.permissions == resource.data.permissions &&
+          request.resource.data.isActive == resource.data.isActive &&
+          request.resource.data.isLocked == resource.data.isLocked
+        ) ||
+        (
+          isSuperAdmin() &&
+          request.auth.uid != userId
+        );
+
       allow delete: if isSuperAdmin() && request.auth.uid != userId;
     }
 
-    // Admin Audit Logs - Read-only for admins, write-only for system
     match /admin_audit_logs/{logId} {
       allow read: if isAdminUser();
-      allow create: if isAdminUser(); // System creates audit logs
-      allow update, delete: if false; // Audit logs are immutable
+      allow create: if isAdminUser();
+      allow update, delete: if false;
     }
 
-    // Tracking Items Collection
     match /tracking_items/{trackingId} {
-      // Public read access for tracking lookup (no authentication required)
-      allow read: if true;
-      
-      // Only authenticated admins can create, update, or delete tracking items
-      allow create, update: if isDevelopmentMode() || (isAuthenticated() && isAdminUser());
-      allow delete: if isDevelopmentMode() || (isAuthenticated() && isSuperAdmin());
-    }
-
-    // Tracking Status Updates Collection (subcollection)
-    match /tracking_items/{trackingId}/status_updates/{updateId} {
-      // Public read access for status history
-      allow read: if true;
-      
-      // Only authenticated admins can create status updates
-      allow create: if isDevelopmentMode() || (isAuthenticated() && isAdminUser());
-      allow update: if isDevelopmentMode() || (isAuthenticated() && isAdminUser());
-      allow delete: if isDevelopmentMode() || (isAuthenticated() && isSuperAdmin());
-    }
-
-    // Tracking Notifications Collection
-    match /tracking_notifications/{notificationId} {
-      // Admins can read all notifications
-      allow read: if isDevelopmentMode() || (isAuthenticated() && isAdminUser());
-      
-      // System can create notifications
-      allow create: if isDevelopmentMode() || (isAuthenticated() && isAdminUser());
-      allow update: if isDevelopmentMode() || (isAuthenticated() && isAdminUser());
-      allow delete: if isDevelopmentMode() || (isAuthenticated() && isAdminUser());
-    }
-
-    // System Counters Collection (for tracking ID generation)
-    match /system_counters/{counterId} {
-      // Only admins can read counters
-      allow read, create, update: if isDevelopmentMode() || (isAuthenticated() && isAdminUser());
-      allow delete: if isDevelopmentMode() || (isAuthenticated() && isSuperAdmin());
-    }
-
-    // Admin Sessions - For session management
-    match /admin_sessions/{sessionId} {
-      allow read, write: if isAuthenticated() && 
-                            resource.data.userId == request.auth.uid;
-      allow delete: if isSuperAdmin(); // Super admins can terminate any session
-    }
-
-    // Regular Users Collection - Admin managed
-    match /users/{userId} {
-      allow read: if isAuthenticated();
-      allow create, update, delete: if isAdminUser();
-    }
-
-    // Tracking Numbers - Admin and user access
-    match /tracking_numbers/{trackingId} {
-      allow read: if isAuthenticated();
-      allow create, update, delete: if isAdminUser();
-    }
-
-    // Audit Logs - Admin read access
-    match /audit_logs/{logId} {
       allow read: if isAdminUser();
-      allow create: if isAuthenticated(); // Users can create audit logs for their actions
-      allow update, delete: if false; // Audit logs are immutable
+      allow create, update: if isAdminUser();
+      allow delete: if isSuperAdmin();
     }
 
-    // System Settings - Super admin only
+    match /public_tracking_items/{trackingId} {
+      allow read: if true;
+      allow create, update, delete: if isAdminUser();
+    }
+
+    match /tracking_items/{trackingId}/status_updates/{updateId} {
+      allow read: if isAdminUser();
+      allow create, update: if isAdminUser();
+      allow delete: if isSuperAdmin();
+    }
+
+    match /tracking_notifications/{notificationId} {
+      allow read, create, update: if isAdminUser();
+      allow delete: if isSuperAdmin();
+    }
+
+    match /system_counters/{counterId} {
+      allow read, create, update: if isAdminUser();
+      allow delete: if isSuperAdmin();
+    }
+
+    match /admin_sessions/{sessionId} {
+      allow create: if isAuthenticated() &&
+        request.resource.data.userId == request.auth.uid;
+      allow get, list, update: if isAuthenticated() &&
+        resource.data.userId == request.auth.uid;
+      allow delete: if isSuperAdmin();
+    }
+
+    match /users/{userId} {
+      allow read, create, update, delete: if isAdminUser();
+    }
+
+    match /tracking_numbers/{trackingId} {
+      allow read, create, update, delete: if isAdminUser();
+    }
+
+    match /audit_logs/{logId} {
+      allow read, create: if isAdminUser();
+      allow update, delete: if false;
+    }
+
     match /system_settings/{settingId} {
       allow read: if isAdminUser();
       allow write: if isSuperAdmin();
     }
 
-    // Reports and Exports - Admin access
     match /reports/{reportId} {
       allow read, create: if isAdminUser();
       allow update, delete: if isSuperAdmin();
     }
 
-    // Quotes Collection
+    // Public quote submission remains allowed, but quote data is no longer public.
     match /quotes/{quoteId} {
-      // Allow public creation of quotes
       allow create: if true;
-      
-      // TEMPORARY: Allow public read access for development
-      // TODO: Revert to authenticated access before production deployment
-      allow read: if true;
-      
-      // Only authenticated admins can update quotes
-      allow update: if isDevelopmentMode() || (isAuthenticated() && isAdminUser());
-      
-      // Only super admins can delete quotes
-      allow delete: if isDevelopmentMode() || (isAuthenticated() && isSuperAdmin());
+      allow read, update: if isAdminUser();
+      allow delete: if isSuperAdmin();
     }
 
-    // Chat System Rules
+    // Chat conversations are accessible to the authenticated participant or admins.
     match /chat_conversations/{conversationId} {
-      // Allow public access to enable unauthenticated user chat
-      allow create: if true;
-      allow read: if true;
-      allow update: if true;
-      
-      // Restrict deletion to admins
-      allow delete: if isDevelopmentMode() || (isAuthenticated() && isAdminUser());
+      allow create: if isAuthenticated() &&
+        request.resource.data.participantUid == request.auth.uid;
+      allow read: if isAdminUser() || isConversationParticipant();
+      allow update: if isAdminUser() || isConversationParticipant();
+      allow delete: if isAdminUser();
     }
 
     match /chat_messages/{messageId} {
-      // Allow public access for real-time chat
-      allow create: if true;
-      allow read: if true;
-      allow update: if true;
-      
-      // Restrict deletion to admins
-      allow delete: if isDevelopmentMode() || (isAuthenticated() && isAdminUser());
+      allow create: if
+        (
+          isAuthenticated() &&
+          request.resource.data.sender == 'user' &&
+          exists(/databases/$(database)/documents/chat_conversations/$(request.resource.data.conversationId)) &&
+          get(/databases/$(database)/documents/chat_conversations/$(request.resource.data.conversationId)).data.participantUid == request.auth.uid
+        ) ||
+        (
+          isAdminUser() &&
+          request.resource.data.sender == 'admin'
+        );
+      allow read: if isAdminUser() ||
+        (
+          isAuthenticated() &&
+          exists(/databases/$(database)/documents/chat_conversations/$(resource.data.conversationId)) &&
+          get(/databases/$(database)/documents/chat_conversations/$(resource.data.conversationId)).data.participantUid == request.auth.uid
+        );
+      allow update: if isAdminUser() ||
+        (
+          isAuthenticated() &&
+          exists(/databases/$(database)/documents/chat_conversations/$(resource.data.conversationId)) &&
+          get(/databases/$(database)/documents/chat_conversations/$(resource.data.conversationId)).data.participantUid == request.auth.uid
+        );
+      allow delete: if isAdminUser();
     }
 
-    // Fallback rule - Deny all other access
     match /{document=**} {
       allow read, write: if false;
     }

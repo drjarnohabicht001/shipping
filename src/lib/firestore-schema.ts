@@ -13,7 +13,10 @@ export interface FirestoreAdminUser {
   phoneNumber?: string;
   phoneVerified?: boolean;
   twoFactorEnabled: boolean;
+  mfaRequired?: boolean;
+  mustChangePassword?: boolean;
   lastPasswordChange: Timestamp;
+  passwordRotationDueAt?: Timestamp;
 
   // Profile Information
   avatar?: string;
@@ -23,7 +26,7 @@ export interface FirestoreAdminUser {
 
   // Access Control & Permissions
   permissions: AdminPermission[];
-  accessLevel: 'super_admin' | 'admin' | 'limited_admin';
+  accessLevel: 'system_admin' | 'super_admin' | 'admin' | 'limited_admin';
   allowedIpRanges?: string[]; // IP whitelist for enhanced security
   sessionTimeout: number; // in minutes
 
@@ -336,6 +339,7 @@ export interface FirestoreChatConversation {
     email: string;
     userId: string; // Unique user identifier generated on first chat
   };
+  participantUid: string; // Firebase Auth UID for the visitor (anonymous or registered)
 
   // Conversation Status
   status: 'active' | 'resolved' | 'archived';
@@ -394,8 +398,11 @@ export const FIRESTORE_COLLECTIONS = {
   ADMIN_USERS: 'admin_users',
   ADMIN_SESSIONS: 'admin_sessions',
   ADMIN_AUDIT_LOGS: 'admin_audit_logs',
+  ADMIN_LOGIN_EVENTS: 'admin_login_events',
+  SECURITY_ALERTS: 'security_alerts',
   ADMIN_PERMISSIONS: 'admin_permissions',
   TRACKING_ITEMS: 'tracking_items',
+  PUBLIC_TRACKING_ITEMS: 'public_tracking_items',
   TRACKING_STATUS_UPDATES: 'tracking_status_updates',
   TRACKING_NOTIFICATIONS: 'tracking_notifications',
   QUOTES: 'quotes',
@@ -415,6 +422,32 @@ export interface AdminSecurityContext {
 
 // Default Admin Permissions by Access Level
 export const DEFAULT_ADMIN_PERMISSIONS: Record<string, AdminPermission[]> = {
+  system_admin: [
+    {
+      resource: AdminResource.USERS,
+      actions: [AdminAction.CREATE, AdminAction.READ, AdminAction.UPDATE, AdminAction.DELETE, AdminAction.LOCK, AdminAction.UNLOCK, AdminAction.VIEW_SENSITIVE],
+      grantedBy: 'system',
+      grantedAt: Timestamp.now()
+    },
+    {
+      resource: AdminResource.AUDIT_LOGS,
+      actions: [AdminAction.READ, AdminAction.EXPORT, AdminAction.VIEW_SENSITIVE],
+      grantedBy: 'system',
+      grantedAt: Timestamp.now()
+    },
+    {
+      resource: AdminResource.SYSTEM_SETTINGS,
+      actions: [AdminAction.READ, AdminAction.UPDATE, AdminAction.VIEW_SENSITIVE],
+      grantedBy: 'system',
+      grantedAt: Timestamp.now()
+    },
+    {
+      resource: AdminResource.SECURITY_SETTINGS,
+      actions: [AdminAction.READ, AdminAction.UPDATE, AdminAction.VIEW_SENSITIVE],
+      grantedBy: 'system',
+      grantedAt: Timestamp.now()
+    }
+  ],
   super_admin: [
     {
       resource: AdminResource.USERS,
@@ -475,9 +508,85 @@ export const validateAdminUser = (user: Partial<FirestoreAdminUser>): string[] =
     errors.push('Valid access level is required');
   }
 
+  if (user.accessLevel && !['system_admin', 'super_admin', 'admin', 'limited_admin'].includes(user.accessLevel)) {
+    errors.push('Valid access level is required');
+  }
+
   if (!user.permissions || user.permissions.length === 0) {
     errors.push('At least one permission is required');
   }
 
   return errors;
 };
+
+export interface AdminSessionRecord {
+  id: string;
+  userId: string;
+  email: string;
+  name: string;
+  accessLevel: FirestoreAdminUser['accessLevel'];
+  sessionCookieIssuedAt: Timestamp;
+  expiresAt: Timestamp;
+  lastActivityAt: Timestamp;
+  createdAt: Timestamp;
+  terminatedAt?: Timestamp;
+  status: 'active' | 'revoked' | 'expired' | 'logged_out';
+  ipAddress?: string;
+  userAgent?: string;
+  loginEventId: string;
+}
+
+export interface AdminLoginEventRecord {
+  id: string;
+  userId: string;
+  email: string;
+  name: string;
+  accessLevel: FirestoreAdminUser['accessLevel'];
+  timestamp: Timestamp;
+  success: boolean;
+  sessionId?: string;
+  ipAddress?: string;
+  userAgent?: string;
+  reason?: string;
+  authMethod: 'password' | 'session_refresh' | 'password_reset';
+}
+
+export interface SecurityAlertRecord {
+  id: string;
+  type: 'failed_login_spike' | 'session_anomaly' | 'manual_review' | 'policy_violation';
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  message: string;
+  createdAt: Timestamp;
+  status: 'open' | 'investigating' | 'resolved';
+  relatedUserId?: string;
+  details?: Record<string, unknown>;
+}
+
+export interface PublicTrackingItem {
+  id: string;
+  trackingId: string;
+  itemName: string;
+  status: TrackingStatus;
+  estimatedDeliveryDate?: Timestamp;
+  actualDeliveryDate?: Timestamp;
+  currentLocation?: {
+    city: string;
+    state?: string;
+    country: string;
+    facility?: string;
+  };
+  statusHistory: Array<{
+    id: string;
+    status: TrackingStatus;
+    timestamp: Timestamp;
+    description: string;
+    isPublic: boolean;
+    location?: {
+      city: string;
+      state?: string;
+      country: string;
+      facility?: string;
+    };
+  }>;
+  updatedAt: Timestamp;
+}

@@ -178,19 +178,13 @@ const TrackingLookup: React.FC<TrackingLookupProps> = ({ className = '' }) => {
                     <span className="font-mono font-medium">{trackingItem.trackingId}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Service Type:</span>
-                    <span className="capitalize">{trackingItem.serviceType.replace('_', ' ')}</span>
+                    <span className="text-gray-600">Shipment:</span>
+                    <span>{trackingItem.itemName}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Priority:</span>
-                    <span className="capitalize">{trackingItem.priority}</span>
+                    <span className="text-gray-600">Visibility:</span>
+                    <span className="text-green-700">Public tracking view</span>
                   </div>
-                  {trackingItem.weight && (
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Weight:</span>
-                      <span>{trackingItem.weight} kg</span>
-                    </div>
-                  )}
                 </div>
               </div>
               
@@ -201,18 +195,9 @@ const TrackingLookup: React.FC<TrackingLookupProps> = ({ className = '' }) => {
                     <span className="text-gray-600">Item:</span>
                     <span>{trackingItem.itemName}</span>
                   </div>
-                  {trackingItem.itemDescription && (
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Description:</span>
-                      <span>{trackingItem.itemDescription}</span>
-                    </div>
-                  )}
-                  {trackingItem.itemValue && (
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Value:</span>
-                      <span>${trackingItem.itemValue}</span>
-                    </div>
-                  )}
+                  <p className="text-gray-500">
+                    Sensitive shipment details are hidden on the public tracking page.
+                  </p>
                 </div>
               </div>
             </div>
@@ -230,36 +215,8 @@ const TrackingLookup: React.FC<TrackingLookupProps> = ({ className = '' }) => {
           <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-100">
             <h3 className="font-medium text-gray-900 mb-4 flex items-center gap-2">
               <Calendar className="w-5 h-5" />
-              Delivery Information
+              Shipment Information
             </h3>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <h4 className="font-medium text-gray-700 mb-2">From</h4>
-                <div className="text-sm text-gray-600">
-                  <p className="font-medium">{trackingItem.sender.name}</p>
-                  {trackingItem.sender.companyName && (
-                    <p>{trackingItem.sender.companyName}</p>
-                  )}
-                  <p>{trackingItem.sender.address.street}</p>
-                  <p>{trackingItem.sender.address.city}, {trackingItem.sender.address.state} {trackingItem.sender.address.postalCode}</p>
-                  <p>{trackingItem.sender.address.country}</p>
-                </div>
-              </div>
-              
-              <div>
-                <h4 className="font-medium text-gray-700 mb-2">To</h4>
-                <div className="text-sm text-gray-600">
-                  <p className="font-medium">{trackingItem.recipient.name}</p>
-                  {trackingItem.recipient.companyName && (
-                    <p>{trackingItem.recipient.companyName}</p>
-                  )}
-                  <p>{trackingItem.recipient.address.street}</p>
-                  <p>{trackingItem.recipient.address.city}, {trackingItem.recipient.address.state} {trackingItem.recipient.address.postalCode}</p>
-                  <p>{trackingItem.recipient.address.country}</p>
-                </div>
-              </div>
-            </div>
             
             <div className="mt-4 pt-4 border-t border-gray-200">
               <div className="flex items-center gap-4 text-sm">
@@ -277,6 +234,9 @@ const TrackingLookup: React.FC<TrackingLookupProps> = ({ className = '' }) => {
                 )}
               </div>
             </div>
+            <p className="mt-4 text-sm text-gray-500">
+              Detailed sender and recipient information is intentionally hidden on public tracking pages for privacy and security.
+            </p>
           </div>
 
           {/* Current Location */}
@@ -297,11 +257,6 @@ const TrackingLookup: React.FC<TrackingLookupProps> = ({ className = '' }) => {
                     <p className="text-gray-700">{trackingItem.currentLocation.country}</p>
                     {trackingItem.currentLocation.facility && (
                       <p className="text-sm text-gray-600 mt-1 italic">{trackingItem.currentLocation.facility}</p>
-                    )}
-                    {trackingItem.currentLocation.coordinates && (
-                      <p className="text-xs text-gray-500 mt-2">
-                        📍 Coordinates: {trackingItem.currentLocation.coordinates.latitude.toFixed(4)}, {trackingItem.currentLocation.coordinates.longitude.toFixed(4)}
-                      </p>
                     )}
                   </div>
                 </div>
@@ -346,22 +301,6 @@ const TrackingLookup: React.FC<TrackingLookupProps> = ({ className = '' }) => {
           </div>
 
           {/* Special Instructions */}
-          {(trackingItem.deliveryInstructions || trackingItem.specialInstructions) && (
-            <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-6 shadow-lg">
-              <h3 className="font-medium text-yellow-800 mb-2">Special Instructions</h3>
-              <div className="text-sm text-yellow-700 space-y-1">
-                {trackingItem.deliveryInstructions && (
-                  <p><strong>Delivery:</strong> {trackingItem.deliveryInstructions}</p>
-                )}
-                {trackingItem.specialInstructions && (
-                  <p><strong>Handling:</strong> {trackingItem.specialInstructions}</p>
-                )}
-                {trackingItem.signatureRequired && (
-                  <p><strong>Note:</strong> Signature required upon delivery</p>
-                )}
-              </div>
-            </div>
-          )}
         </div>
       )}
     </div>

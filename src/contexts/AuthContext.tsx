@@ -13,19 +13,28 @@ import {
   AuthState,
   LoginCredentials,
   UserRole,
+  Permission,
   hasPermission,
 } from "@/types/auth";
 import {
   onAuthStateChanged,
+  getMultiFactorResolver,
+  MultiFactorError,
+  MultiFactorResolver,
   signInWithEmailAndPassword,
   signOut,
+  TotpMultiFactorGenerator,
+  User as FirebaseUser,
 } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { adminUserService } from "@/services/adminUserService";
 import { FirestoreAdminUser } from "@/lib/firestore-schema";
+import { useRef } from "react";
 
 interface AuthContextType extends AuthState {
   login: (credentials: LoginCredentials) => Promise<void>;
+  completeMfaSignIn: (code: string) => Promise<void>;
+  cancelMfaSignIn: () => void;
   logout: () => void;
   checkAuth: () => Promise<void>;
 }
@@ -36,6 +45,8 @@ type AuthAction =
   | { type: "LOGIN_START" }
   | { type: "LOGIN_SUCCESS"; payload: User }
   | { type: "LOGIN_FAILURE"; payload: string }
+  | { type: "MFA_REQUIRED"; payload: AuthState["mfaChallenge"] }
+  | { type: "MFA_FAILURE"; payload: string }
   | { type: "LOGOUT" }
   | { type: "SET_LOADING"; payload: boolean }
   | { type: "CLEAR_ERROR" };
@@ -51,8 +62,27 @@ const authReducer = (state: AuthState, action: AuthAction): AuthState => {
         isAuthenticated: true,
         isLoading: false,
         error: null,
+        mfaChallenge: null,
       };
     case "LOGIN_FAILURE":
+      return {
+        ...state,
+        user: null,
+        isAuthenticated: false,
+        isLoading: false,
+        error: action.payload,
+        mfaChallenge: null,
+      };
+    case "MFA_REQUIRED":
+      return {
+        ...state,
+        user: null,
+        isAuthenticated: false,
+        isLoading: false,
+        error: null,
+        mfaChallenge: action.payload,
+      };
+    case "MFA_FAILURE":
       return {
         ...state,
         user: null,
@@ -67,6 +97,7 @@ const authReducer = (state: AuthState, action: AuthAction): AuthState => {
         isAuthenticated: false,
         isLoading: false,
         error: null,
+        mfaChallenge: null,
       };
     case "SET_LOADING":
       return { ...state, isLoading: action.payload };
@@ -82,22 +113,39 @@ const initialState: AuthState = {
   isAuthenticated: false,
   isLoading: true,
   error: null,
+  mfaChallenge: null,
 };
 
 /**
  * Convert a Firestore admin user document to our app's User type
  */
 function mapAdminUserToUser(adminUser: FirestoreAdminUser): User {
+  const mappedPermissions: Permission[] = (adminUser.permissions || []).map(
+    (permission) => ({
+      resource: permission.resource,
+      actions: [...permission.actions],
+    })
+  );
+
   return {
     id: adminUser.uid,
     email: adminUser.email,
     name: adminUser.name,
     role:
-      adminUser.accessLevel === "super_admin" ? UserRole.ADMIN : UserRole.USER,
+      adminUser.accessLevel === "system_admin"
+        ? UserRole.SYSTEM_ADMIN
+        : UserRole.ADMIN,
+    accessLevel: adminUser.accessLevel,
     avatar: "/img/testimonials-1.webp",
     createdAt: adminUser.createdAt?.toDate?.() ?? new Date(),
-    lastLogin: new Date(),
+    lastLogin: adminUser.lastLogin?.toDate?.() ?? new Date(),
+    lastActivity: adminUser.lastActivity?.toDate?.(),
     isActive: adminUser.isActive,
+    mfaEnabled: adminUser.twoFactorEnabled,
+    mfaRequired: adminUser.mfaRequired,
+    mustChangePassword: adminUser.mustChangePassword,
+    passwordRotationDueAt: adminUser.passwordRotationDueAt?.toDate?.(),
+    permissions: mappedPermissions,
   };
 }
 
@@ -105,28 +153,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
   children,
 }) => {
   const [state, dispatch] = useReducer(authReducer, initialState);
+  const mfaResolverRef = useRef<MultiFactorResolver | null>(null);
 
-  const login = useCallback(async (credentials: LoginCredentials) => {
-    dispatch({ type: "LOGIN_START" });
-    try {
-      // Step 1: Authenticate with Firebase Auth FIRST
-      // This establishes an authenticated session before any Firestore queries
-      const userCredential = await signInWithEmailAndPassword(
-        auth,
-        credentials.email,
-        credentials.password,
-      );
-
-      const firebaseUser = userCredential.user;
-
-      // Step 2: Now that we're authenticated, fetch admin user data from Firestore
-      // Use direct document read by UID (not a collection query) to work with security rules
-      const adminUser = await adminUserService.getAdminUserByUid(
-        firebaseUser.uid,
-      );
+  const establishAdminSession = useCallback(
+    async (firebaseUser: FirebaseUser) => {
+      const adminUser = await adminUserService.getAdminUserByUid(firebaseUser.uid);
 
       if (!adminUser) {
-        // User exists in Firebase Auth but not in admin_users collection
         await signOut(auth);
         throw new Error("You do not have admin access");
       }
@@ -137,19 +170,64 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
       }
 
       const user = mapAdminUserToUser(adminUser);
+      const idToken = await firebaseUser.getIdToken();
+      const sessionResponse = await fetch("/api/auth/session", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({ idToken }),
+      });
 
-      // Set token for middleware cookie check
-      const token = await firebaseUser.getIdToken();
-      localStorage.setItem("auth_token", token);
-      document.cookie = `auth-token=${token}; path=/; max-age=86400; secure; samesite=strict`;
+      if (!sessionResponse.ok) {
+        await signOut(auth);
+        throw new Error("Unable to establish a secure admin session");
+      }
 
-      // Update last login in Firestore (non-blocking)
       adminUserService.updateLastLogin(firebaseUser.uid).catch(console.error);
-
+      mfaResolverRef.current = null;
       dispatch({ type: "LOGIN_SUCCESS", payload: user });
+    },
+    []
+  );
+
+  const login = useCallback(async (credentials: LoginCredentials) => {
+    dispatch({ type: "LOGIN_START" });
+    try {
+      const userCredential = await signInWithEmailAndPassword(
+        auth,
+        credentials.email,
+        credentials.password,
+      );
+      await establishAdminSession(userCredential.user);
     } catch (error: any) {
-      // Map Firebase Auth error codes to user-friendly messages
       let message = "Authentication failed";
+      if (error?.code === "auth/multi-factor-auth-required") {
+        const resolver = getMultiFactorResolver(auth, error as MultiFactorError);
+        const totpHint = resolver.hints.find((hint) => hint.factorId === "totp");
+
+        if (!totpHint) {
+          dispatch({
+            type: "LOGIN_FAILURE",
+            payload: "This admin account requires an unsupported second factor.",
+          });
+          return;
+        }
+
+        mfaResolverRef.current = resolver;
+        dispatch({
+          type: "MFA_REQUIRED",
+          payload: {
+            factorId: totpHint.factorId,
+            enrollmentId: totpHint.uid,
+            displayName: totpHint.displayName ?? null,
+            email: credentials.email,
+          },
+        });
+        return;
+      }
+
       if (
         error?.code === "auth/user-not-found" ||
         error?.code === "auth/wrong-password" ||
@@ -163,17 +241,61 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
       }
       dispatch({ type: "LOGIN_FAILURE", payload: message });
     }
+  }, [establishAdminSession]);
+
+  const completeMfaSignIn = useCallback(
+    async (code: string) => {
+      if (!mfaResolverRef.current || !state.mfaChallenge) {
+        dispatch({
+          type: "LOGIN_FAILURE",
+          payload: "No multi-factor sign-in challenge is pending.",
+        });
+        return;
+      }
+
+      dispatch({ type: "LOGIN_START" });
+
+      try {
+        const assertion = TotpMultiFactorGenerator.assertionForSignIn(
+          state.mfaChallenge.enrollmentId,
+          code.trim()
+        );
+        const userCredential = await mfaResolverRef.current.resolveSignIn(assertion);
+        await establishAdminSession(userCredential.user);
+      } catch (error: any) {
+        let message = "Unable to verify the authentication code.";
+        if (
+          error?.code === "auth/invalid-verification-code" ||
+          error?.code === "auth/code-expired"
+        ) {
+          message = "Invalid or expired authentication code.";
+        } else if (error instanceof Error) {
+          message = error.message;
+        }
+        dispatch({ type: "MFA_FAILURE", payload: message });
+      }
+    },
+    [establishAdminSession, state.mfaChallenge]
+  );
+
+  const cancelMfaSignIn = useCallback(() => {
+    mfaResolverRef.current = null;
+    dispatch({ type: "LOGOUT" });
   }, []);
 
   const logout = useCallback(async () => {
+    mfaResolverRef.current = null;
     try {
       await signOut(auth);
     } catch (error) {
       console.error("Firebase sign out error:", error);
     }
-    localStorage.removeItem("auth_token");
-    document.cookie =
-      "auth-token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+    await fetch("/api/auth/session", {
+      method: "DELETE",
+      credentials: "include",
+    }).catch((error) => {
+      console.error("Session cleanup error:", error);
+    });
     dispatch({ type: "LOGOUT" });
   }, []);
 
@@ -194,20 +316,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
           );
 
           if (adminUser && adminUser.isActive && !adminUser.isLocked) {
-            const user = mapAdminUserToUser(adminUser);
-
-            // Refresh token for middleware
-            const token = await firebaseUser.getIdToken();
-            localStorage.setItem("auth_token", token);
-            document.cookie = `auth-token=${token}; path=/; max-age=86400; secure; samesite=strict`;
-
-            dispatch({ type: "LOGIN_SUCCESS", payload: user });
+            await establishAdminSession(firebaseUser);
           } else {
-            // Admin user not found or inactive — sign out
             await signOut(auth);
-            localStorage.removeItem("auth_token");
-            document.cookie =
-              "auth-token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
             dispatch({ type: "LOGOUT" });
           }
         } catch (error) {
@@ -215,20 +326,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
           dispatch({ type: "LOGOUT" });
         }
       } else {
-        // No user signed in
-        localStorage.removeItem("auth_token");
-        document.cookie =
-          "auth-token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
         dispatch({ type: "LOGOUT" });
       }
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [establishAdminSession]);
 
   const value: AuthContextType = {
     ...state,
     login,
+    completeMfaSignIn,
+    cancelMfaSignIn,
     logout,
     checkAuth,
   };
@@ -250,7 +359,7 @@ export const usePermissions = () => {
   const checkPermission = (resource: string, action: string): boolean => {
     if (!user) return false;
 
-    return hasPermission(user.role, resource, action);
+    return hasPermission(user.role, resource, action, user.permissions);
   };
 
   return { hasPermission: checkPermission };

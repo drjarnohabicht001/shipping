@@ -1,84 +1,152 @@
+import { randomBytes } from 'crypto';
+import { cert, getApps, initializeApp } from 'firebase-admin/app';
+import { getAuth } from 'firebase-admin/auth';
+import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 
-import { initializeApp } from 'firebase/app';
-import { getFirestore, doc, setDoc, Timestamp } from 'firebase/firestore';
-import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
+const ADMIN_EMAIL = process.env.SEED_ADMIN_EMAIL;
+const ADMIN_NAME = process.env.SEED_ADMIN_NAME || 'System Administrator';
+const ACCESS_LEVEL = process.env.SEED_ADMIN_ACCESS_LEVEL || 'system_admin';
+const EXPLICIT_PASSWORD = process.env.SEED_ADMIN_PASSWORD;
 
-const firebaseConfig = {
-  apiKey: "AIzaSyAWOZ0IO4nmPOPj_-wt-CC8JIwz3yX9_NI",
-  authDomain: "test-e12ce.firebaseapp.com",
-  projectId: "test-e12ce",
-  storageBucket: "test-e12ce.firebasestorage.app",
-  messagingSenderId: "93491215580",
-  appId: "1:93491215580:web:40cc63c67a9eacc530c819",
-  measurementId: "G-CPVK6T9VGN"
-};
+function getPrivateKey() {
+  return process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
+}
 
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
-const auth = getAuth(app);
+function generateStrongPassword(length = 32) {
+  return randomBytes(length).toString('base64url').slice(0, length);
+}
 
-const ADMIN_EMAIL = 'admin@shipping.com';
-const ADMIN_PASSWORD = 'admin123';
-
-const SUPER_ADMIN_PERMISSIONS = [
+function getAdminPermissions(now) {
+  return [
     {
       resource: 'users',
-      actions: ['create', 'read', 'update', 'delete', 'lock', 'unlock'],
+      actions: ['create', 'read', 'update', 'delete', 'manage', 'lock', 'unlock'],
       grantedBy: 'system',
-      grantedAt: Timestamp.now()
+      grantedAt: now
     },
     {
-      resource: 'system_settings',
-      actions: ['read', 'update'],
+      resource: 'security',
+      actions: ['read', 'update', 'manage'],
       grantedBy: 'system',
-      grantedAt: Timestamp.now()
+      grantedAt: now
     },
     {
-      resource: 'audit_logs',
+      resource: 'sessions',
+      actions: ['read', 'delete', 'manage'],
+      grantedBy: 'system',
+      grantedAt: now
+    },
+    {
+      resource: 'logins',
       actions: ['read', 'export'],
       grantedBy: 'system',
-      grantedAt: Timestamp.now()
+      grantedAt: now
+    },
+    {
+      resource: 'settings',
+      actions: ['read', 'update'],
+      grantedBy: 'system',
+      grantedAt: now
+    },
+    {
+      resource: 'audit',
+      actions: ['read', 'export'],
+      grantedBy: 'system',
+      grantedAt: now
+    },
+    {
+      resource: 'tracking',
+      actions: ['create', 'read', 'update', 'delete'],
+      grantedBy: 'system',
+      grantedAt: now
+    },
+    {
+      resource: 'quotes',
+      actions: ['create', 'read', 'update', 'delete'],
+      grantedBy: 'system',
+      grantedAt: now
+    },
+    {
+      resource: 'messages',
+      actions: ['read', 'update'],
+      grantedBy: 'system',
+      grantedAt: now
     }
-];
+  ];
+}
 
 async function seedAdmin() {
   try {
-    console.log('Creating Admin User in Firebase Auth...');
-    let uid;
-    try {
-        const userCredential = await createUserWithEmailAndPassword(auth, ADMIN_EMAIL, ADMIN_PASSWORD);
-        uid = userCredential.user.uid;
-        console.log('User created with UID:', uid);
-    } catch (error) {
-        if (error.code === 'auth/email-already-in-use') {
-            console.log('User already exists in Auth. Retrying login or skipping...');
-            // In a real script we might want to sign in to get the UID, 
-            // but for seeding we can't easily get the UID of an existing user without Admin SDK.
-            // However, we can try to sign in to get the UID.
-            // For now, let's assume we can't proceed if user exists but we don't know the password or UID.
-            // Actually, we can just throw.
-            console.error('Error: User already exists. Please verify manually or delete the user from Firebase Console.');
-            process.exit(1);
-        } else {
-            throw error;
-        }
+    const projectId = process.env.FIREBASE_PROJECT_ID;
+    const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+    const privateKey = getPrivateKey();
+
+    if (!projectId || !clientEmail || !privateKey) {
+      throw new Error('Missing Firebase Admin SDK credentials in environment.');
     }
 
+    if (!ADMIN_EMAIL) {
+      throw new Error('Missing SEED_ADMIN_EMAIL environment variable.');
+    }
+
+    const app =
+      getApps()[0] ||
+      initializeApp({
+        credential: cert({
+          projectId,
+          clientEmail,
+          privateKey,
+        }),
+      });
+
+    const auth = getAuth(app);
+    const db = getFirestore(app);
     const now = Timestamp.now();
+    const password = EXPLICIT_PASSWORD || generateStrongPassword(28);
+
+    let userRecord;
+    try {
+      userRecord = await auth.getUserByEmail(ADMIN_EMAIL);
+      await auth.updateUser(userRecord.uid, {
+        password,
+        displayName: ADMIN_NAME,
+        emailVerified: true,
+        disabled: false,
+      });
+      console.log(`Updated existing Firebase Auth admin: ${ADMIN_EMAIL}`);
+    } catch (error) {
+      if (error.code !== 'auth/user-not-found') {
+        throw error;
+      }
+
+      userRecord = await auth.createUser({
+        email: ADMIN_EMAIL,
+        password,
+        displayName: ADMIN_NAME,
+        emailVerified: true,
+        disabled: false,
+      });
+      console.log(`Created Firebase Auth admin: ${ADMIN_EMAIL}`);
+    }
+
+    await auth.revokeRefreshTokens(userRecord.uid);
 
     const adminUserData = {
-      uid: uid,
+      uid: userRecord.uid,
       email: ADMIN_EMAIL,
-      name: 'Super Admin',
+      name: ADMIN_NAME,
       role: 'admin',
-      accessLevel: 'super_admin',
-      isActive: true, // Auto-activate
+      accessLevel: ACCESS_LEVEL,
+      isActive: true,
       isLocked: false,
       emailVerified: true,
       twoFactorEnabled: false,
+      mustChangePassword: true,
+      mfaRequired: true,
       lastPasswordChange: now,
-      permissions: SUPER_ADMIN_PERMISSIONS,
-      sessionTimeout: 480,
+      passwordRotationDueAt: Timestamp.fromMillis(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      permissions: getAdminPermissions(now),
+      sessionTimeout: 60,
       createdAt: now,
       createdBy: 'system',
       updatedAt: now,
@@ -86,20 +154,24 @@ async function seedAdmin() {
       version: 1,
       loginAttempts: 0,
       auditTrail: [{
-        id: 'init-seed',
+        id: `seed-${Date.now()}`,
         action: 'ADMIN_USER_CREATED',
         timestamp: now,
-        details: { createdBy: 'system', method: 'seed_script' },
-        severity: 'medium'
+        details: { createdBy: 'system', method: 'admin_sdk_seed' },
+        severity: 'high'
       }]
     };
 
-    console.log('Creating Admin User document in Firestore...');
-    await setDoc(doc(db, 'admin_users', uid), adminUserData);
-    
-    console.log('Successfully seeded admin user!');
-    process.exit(0);
+    await db.collection('admin_users').doc(userRecord.uid).set(adminUserData, { merge: true });
 
+    console.log('');
+    console.log('System admin seeded successfully.');
+    console.log(`Email: ${ADMIN_EMAIL}`);
+    console.log(`UID: ${userRecord.uid}`);
+    console.log(`Access Level: ${ACCESS_LEVEL}`);
+    console.log(`Generated Password: ${password}`);
+    console.log('This password is shown once. Store it securely and rotate it after first login.');
+    process.exit(0);
   } catch (error) {
     console.error('Error seeding admin user:', error);
     process.exit(1);

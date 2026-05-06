@@ -93,10 +93,7 @@ export class AdminUserService {
    */
   async getAdminUser(uid: string, requestorUid: string): Promise<FirestoreAdminUser | null> {
     try {
-      // Temporary development bypass - remove in production
-      const isDevelopment = process.env.NODE_ENV === 'development' || true;
-      if (!isDevelopment) {
-        // Verify requestor has permission to view admin users
+      if (uid !== requestorUid) {
         const hasPermission = await this.checkAdminPermission(requestorUid, 'users', 'read');
         if (!hasPermission) {
           throw new Error('Insufficient permissions to view admin users');
@@ -303,16 +300,7 @@ export class AdminUserService {
    */
   async checkAdminPermission(uid: string, resource: string, action: string): Promise<boolean> {
     try {
-      // Development bypass - always allow in development mode
-      const isDevelopment = process.env.NODE_ENV === 'development' || 
-                           typeof window !== 'undefined' && window.location.hostname === 'localhost';
-      if (isDevelopment) {
-        console.log(`Development mode: Allowing ${action} on ${resource} for user ${uid}`);
-        return true;
-      }
-
-      // Production permission check would go here
-      const adminUser = await this.getAdminUser(uid, uid);
+      const adminUser = await this.getAdminUserByUid(uid);
       if (!adminUser || !adminUser.isActive || adminUser.isLocked) {
         return false;
       }
@@ -324,10 +312,7 @@ export class AdminUserService {
       );
     } catch (error) {
       console.error('Permission check error:', error);
-      // In development, allow on error
-      const isDevelopment = process.env.NODE_ENV === 'development' || 
-                           typeof window !== 'undefined' && window.location.hostname === 'localhost';
-      return isDevelopment;
+      return false;
     }
   }
 

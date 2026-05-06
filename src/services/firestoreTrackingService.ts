@@ -2,6 +2,7 @@ import {
   collection,
   doc,
   addDoc,
+  setDoc,
   getDoc,
   getDocs,
   updateDoc,
@@ -18,6 +19,7 @@ import {
 import { db } from '@/lib/firebase';
 import {
   FirestoreTrackingItem,
+  PublicTrackingItem,
   TrackingStatusUpdate,
   TrackingStatus,
   FIRESTORE_COLLECTIONS
@@ -123,6 +125,42 @@ class FirestoreTrackingService {
       FirestoreTrackingService.instance = new FirestoreTrackingService();
     }
     return FirestoreTrackingService.instance;
+  }
+
+  private mapPublicTrackingItem(trackingItem: FirestoreTrackingItem): Omit<PublicTrackingItem, 'id'> {
+    return {
+      trackingId: trackingItem.trackingId,
+      itemName: trackingItem.itemName,
+      status: trackingItem.status,
+      estimatedDeliveryDate: trackingItem.estimatedDeliveryDate,
+      actualDeliveryDate: trackingItem.actualDeliveryDate,
+      currentLocation: trackingItem.currentLocation
+        ? {
+            city: trackingItem.currentLocation.city,
+            state: trackingItem.currentLocation.state,
+            country: trackingItem.currentLocation.country,
+            facility: trackingItem.currentLocation.facility,
+          }
+        : undefined,
+      statusHistory: (trackingItem.statusHistory || [])
+        .filter((entry) => entry.isPublic)
+        .map((entry) => ({
+          id: entry.id,
+          status: entry.status,
+          timestamp: entry.timestamp,
+          description: entry.description,
+          isPublic: entry.isPublic,
+          location: entry.location
+            ? {
+                city: entry.location.city,
+                state: entry.location.state,
+                country: entry.location.country,
+                facility: entry.location.facility,
+              }
+            : undefined,
+        })),
+      updatedAt: trackingItem.updatedAt,
+    };
   }
 
   /**
@@ -241,70 +279,22 @@ class FirestoreTrackingService {
    */
   async createTrackingItem(request: CreateTrackingItemRequest, createdBy: string): Promise<FirestoreTrackingItem> {
     try {
-      const trackingId = await this.generateTrackingId();
-      const now = Timestamp.now();
-      const estimatedDelivery = this.calculateEstimatedDelivery(request.serviceType);
-      const cost = this.calculateShippingCost(request);
-
-      const initialStatusUpdate: TrackingStatusUpdate = {
-        id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        status: TrackingStatus.PENDING,
-        timestamp: now,
-        description: 'Tracking number generated and shipment created',
-        updatedBy: createdBy,
-        isPublic: true
-      };
-
-      const trackingItemData: Omit<FirestoreTrackingItem, 'id'> = {
-        trackingId,
-        itemName: request.itemName,
-        itemDescription: request.itemDescription,
-        itemValue: request.itemValue,
-        itemCategory: request.itemCategory,
-        weight: request.weight,
-        dimensions: request.dimensions,
-        sender: request.sender,
-        recipient: request.recipient,
-        serviceType: request.serviceType,
-        priority: request.priority,
-        status: TrackingStatus.PENDING,
-        estimatedDeliveryDate: estimatedDelivery,
-        deliveryInstructions: request.deliveryInstructions,
-        signatureRequired: request.signatureRequired || false,
-        cost: request.cost || cost, // Use provided cost if available
-        vat: request.vat,
-        tax: request.tax,
-        currency: 'USD',
-        paymentStatus: 'pending',
-        createdAt: now,
-        updatedAt: now,
-        createdBy,
-        lastUpdatedBy: createdBy,
-        isFragile: request.isFragile || false,
-        requiresSignature: request.requiresSignature || false,
-        insuranceAmount: request.insuranceAmount,
-        specialInstructions: request.specialInstructions,
-        statusHistory: [initialStatusUpdate],
-        notificationPreferences: request.notificationPreferences || {
-          sms: true,
-          email: true,
-          push: true
+      const response = await fetch('/api/admin/tracking', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
         },
-        tags: request.tags,
-        notes: request.notes
-      };
+        credentials: 'include',
+        body: JSON.stringify({ ...request, createdBy })
+      });
 
-      // Filter out undefined values to prevent Firestore errors
-      const trackingItem = Object.fromEntries(
-        Object.entries(trackingItemData).filter(([_, value]) => value !== undefined)
-      ) as Omit<FirestoreTrackingItem, 'id'>;
+      const data = await response.json();
 
-      const docRef = await addDoc(collection(db, FIRESTORE_COLLECTIONS.TRACKING_ITEMS), trackingItem);
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to create tracking item');
+      }
 
-      return {
-        id: docRef.id,
-        ...trackingItem
-      };
+      return data.item as FirestoreTrackingItem;
     } catch (error) {
       console.error('Error creating tracking item:', error);
       throw new Error('Failed to create tracking item');
@@ -316,8 +306,30 @@ class FirestoreTrackingService {
    */
   async getTrackingByTrackingId(trackingId: string): Promise<FirestoreTrackingItem | null> {
     try {
+      const response = await fetch(`/api/admin/tracking/${encodeURIComponent(trackingId)}`, {
+        credentials: 'include'
+      });
+      const data = await response.json();
+
+      if (response.status === 404) {
+        return null;
+      }
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to retrieve tracking information');
+      }
+
+      return data.item as FirestoreTrackingItem;
+    } catch (error) {
+      console.error('Error getting tracking item:', error);
+      throw new Error('Failed to retrieve tracking information');
+    }
+  }
+
+  async getPublicTrackingByTrackingId(trackingId: string): Promise<PublicTrackingItem | null> {
+    try {
       const q = query(
-        collection(db, FIRESTORE_COLLECTIONS.TRACKING_ITEMS),
+        collection(db, FIRESTORE_COLLECTIONS.PUBLIC_TRACKING_ITEMS),
         where('trackingId', '==', trackingId),
         limit(1)
       );
@@ -328,13 +340,13 @@ class FirestoreTrackingService {
         return null;
       }
 
-      const doc = querySnapshot.docs[0];
+      const itemDoc = querySnapshot.docs[0];
       return {
-        id: doc.id,
-        ...doc.data()
-      } as FirestoreTrackingItem;
+        id: itemDoc.id,
+        ...itemDoc.data()
+      } as PublicTrackingItem;
     } catch (error) {
-      console.error('Error getting tracking item:', error);
+      console.error('Error getting public tracking item:', error);
       throw new Error('Failed to retrieve tracking information');
     }
   }
@@ -364,119 +376,32 @@ class FirestoreTrackingService {
     return obj;
   }
 
+  private async writePublicTrackingProjection(trackingItem: FirestoreTrackingItem): Promise<void> {
+    const publicDocRef = doc(db, FIRESTORE_COLLECTIONS.PUBLIC_TRACKING_ITEMS, trackingItem.id);
+    await setDoc(
+      publicDocRef,
+      this.removeUndefinedValues(this.mapPublicTrackingItem(trackingItem))
+    );
+  }
+
   /**
    * Update tracking status
    */
   async updateTrackingStatus(request: UpdateTrackingStatusRequest): Promise<void> {
     try {
-      const trackingItem = await this.getTrackingByTrackingId(request.trackingId);
+      const response = await fetch(`/api/admin/tracking/${encodeURIComponent(request.trackingId)}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        credentials: 'include',
+        body: JSON.stringify(request)
+      });
+      const data = await response.json();
 
-      if (!trackingItem) {
-        throw new Error('Tracking item not found');
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to update tracking status');
       }
-
-      const now = Timestamp.now();
-
-      // Build status update, removing undefined values
-      const statusUpdateData: any = {
-        id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        status: request.status,
-        timestamp: now,
-        description: request.description,
-        updatedBy: request.updatedBy,
-        isPublic: request.isPublic !== false
-      };
-
-      // Only add location if it exists and has required fields
-      if (request.location && request.location.city && request.location.country) {
-        const locationData: any = {
-          city: request.location.city,
-          country: request.location.country
-        };
-        if (request.location.state) {
-          locationData.state = request.location.state;
-        }
-        if (request.location.facility) {
-          locationData.facility = request.location.facility;
-        }
-        if (request.location.coordinates &&
-          typeof request.location.coordinates.latitude === 'number' &&
-          typeof request.location.coordinates.longitude === 'number' &&
-          !isNaN(request.location.coordinates.latitude) &&
-          !isNaN(request.location.coordinates.longitude)) {
-          locationData.coordinates = {
-            latitude: request.location.coordinates.latitude,
-            longitude: request.location.coordinates.longitude
-          };
-        }
-        statusUpdateData.location = locationData;
-      }
-
-      // Only add notes if provided
-      if (request.notes) {
-        statusUpdateData.notes = request.notes;
-      }
-
-      const statusUpdate: TrackingStatusUpdate = statusUpdateData as TrackingStatusUpdate;
-
-      // Ensure statusHistory exists and clean it
-      const existingHistory = trackingItem.statusHistory || [];
-      // Clean existing history entries to remove any undefined values
-      const cleanedHistory = existingHistory.map(entry => this.removeUndefinedValues(entry));
-
-      const updateData: any = {
-        status: request.status,
-        updatedAt: now,
-        lastUpdatedBy: request.updatedBy,
-        statusHistory: [...cleanedHistory, statusUpdate]
-      };
-
-      // Update current location if provided and valid
-      if (request.location && request.location.city && request.location.country) {
-        const locationData: any = {
-          city: request.location.city,
-          country: request.location.country
-        };
-        if (request.location.state) {
-          locationData.state = request.location.state;
-        }
-        if (request.location.facility) {
-          locationData.facility = request.location.facility;
-        }
-        if (request.location.coordinates &&
-          typeof request.location.coordinates.latitude === 'number' &&
-          typeof request.location.coordinates.longitude === 'number' &&
-          !isNaN(request.location.coordinates.latitude) &&
-          !isNaN(request.location.coordinates.longitude)) {
-          locationData.coordinates = {
-            latitude: request.location.coordinates.latitude,
-            longitude: request.location.coordinates.longitude
-          };
-        }
-        updateData.currentLocation = locationData;
-      }
-
-      // Set delivery timestamp if delivered
-      if (request.status === TrackingStatus.DELIVERED) {
-        updateData.deliveredAt = now;
-        updateData.actualDeliveryDate = now;
-      }
-
-      // Set pickup timestamp if picked up
-      if (request.status === TrackingStatus.PICKED_UP) {
-        updateData.pickedUpAt = now;
-      }
-
-      // Update estimated delivery date if provided
-      if (request.estimatedDeliveryDate) {
-        updateData.estimatedDeliveryDate = Timestamp.fromDate(request.estimatedDeliveryDate);
-      }
-
-      // Remove all undefined values before sending to Firestore
-      const cleanedUpdateData = this.removeUndefinedValues(updateData);
-
-      const docRef = doc(db, FIRESTORE_COLLECTIONS.TRACKING_ITEMS, trackingItem.id);
-      await updateDoc(docRef, cleanedUpdateData);
     } catch (error: any) {
       console.error('Error updating tracking status:', error);
       // Provide more detailed error message
@@ -490,60 +415,34 @@ class FirestoreTrackingService {
    */
   async searchTrackingItems(filters: TrackingSearchFilters): Promise<FirestoreTrackingItem[]> {
     try {
-      let q = query(collection(db, FIRESTORE_COLLECTIONS.TRACKING_ITEMS));
-
-      // Apply filters
-      if (filters.status && filters.status.length > 0) {
-        q = query(q, where('status', 'in', filters.status));
-      }
-
-      if (filters.createdBy) {
-        q = query(q, where('createdBy', '==', filters.createdBy));
-      }
-
-      if (filters.dateRange) {
-        q = query(
-          q,
-          where('createdAt', '>=', Timestamp.fromDate(filters.dateRange.start)),
-          where('createdAt', '<=', Timestamp.fromDate(filters.dateRange.end))
-        );
-      }
-
-      // Order by creation date (newest first)
-      q = query(q, orderBy('createdAt', 'desc'));
-
-      const querySnapshot = await getDocs(q);
-      const items = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as FirestoreTrackingItem[];
-
-      // Apply client-side filters for complex queries
-      let filteredItems = items;
-
+      const params = new URLSearchParams();
       if (filters.searchQuery) {
-        const searchLower = filters.searchQuery.toLowerCase();
-        filteredItems = filteredItems.filter(item =>
-          item.trackingId.toLowerCase().includes(searchLower) ||
-          item.itemName.toLowerCase().includes(searchLower) ||
-          item.sender.name.toLowerCase().includes(searchLower) ||
-          item.recipient.name.toLowerCase().includes(searchLower)
-        );
+        params.set('searchQuery', filters.searchQuery);
       }
+      if (filters.status && filters.status.length > 0) {
+        params.set('status', filters.status.join(','));
+      }
+
+      const response = await fetch(`/api/admin/tracking?${params.toString()}`, {
+        credentials: 'include'
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to search tracking items');
+      }
+
+      let items = data.items as FirestoreTrackingItem[];
 
       if (filters.priority && filters.priority.length > 0) {
-        filteredItems = filteredItems.filter(item =>
-          filters.priority!.includes(item.priority)
-        );
+        items = items.filter(item => filters.priority!.includes(item.priority));
       }
 
       if (filters.serviceType && filters.serviceType.length > 0) {
-        filteredItems = filteredItems.filter(item =>
-          filters.serviceType!.includes(item.serviceType)
-        );
+        items = items.filter(item => filters.serviceType!.includes(item.serviceType));
       }
 
-      return filteredItems;
+      return items;
     } catch (error) {
       console.error('Error searching tracking items:', error);
       throw new Error('Failed to search tracking items');
@@ -582,27 +481,48 @@ class FirestoreTrackingService {
     });
   }
 
+  subscribeToPublicTrackingUpdates(
+    trackingId: string,
+    callback: (trackingItem: PublicTrackingItem | null) => void
+  ): () => void {
+    const q = query(
+      collection(db, FIRESTORE_COLLECTIONS.PUBLIC_TRACKING_ITEMS),
+      where('trackingId', '==', trackingId),
+      limit(1)
+    );
+
+    return onSnapshot(q, (querySnapshot) => {
+      if (querySnapshot.empty) {
+        callback(null);
+        return;
+      }
+
+      const itemDoc = querySnapshot.docs[0];
+      callback({
+        id: itemDoc.id,
+        ...itemDoc.data()
+      } as PublicTrackingItem);
+    }, (error) => {
+      console.error('Error in public tracking subscription:', error);
+      callback(null);
+    });
+  }
+
   /**
    * Get all tracking items (for initial load)
    */
   async getAllTrackingItems(): Promise<FirestoreTrackingItem[]> {
     try {
-      const q = query(
-        collection(db, FIRESTORE_COLLECTIONS.TRACKING_ITEMS),
-        orderBy('createdAt', 'desc')
-      );
-
-      const querySnapshot = await getDocs(q);
-      const trackingItems: FirestoreTrackingItem[] = [];
-
-      querySnapshot.forEach((doc) => {
-        trackingItems.push({
-          id: doc.id,
-          ...doc.data()
-        } as FirestoreTrackingItem);
+      const response = await fetch('/api/admin/tracking', {
+        credentials: 'include'
       });
+      const data = await response.json();
 
-      return trackingItems;
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to fetch tracking items');
+      }
+
+      return data.items as FirestoreTrackingItem[];
     } catch (error) {
       console.error('Error fetching all tracking items:', error);
       throw error;
@@ -642,28 +562,35 @@ class FirestoreTrackingService {
    */
   async deleteTrackingItem(trackingId: string): Promise<void> {
     try {
-      // 1. Try to find by the friendly trackingId field (e.g. SH-2024-000001)
-      const trackingItem = await this.getTrackingByTrackingId(trackingId);
+      const response = await fetch(`/api/admin/tracking/${encodeURIComponent(trackingId)}`, {
+        method: 'DELETE',
+        credentials: 'include'
+      });
+      const data = await response.json().catch(() => ({}));
 
-      if (trackingItem) {
-        const docRef = doc(db, FIRESTORE_COLLECTIONS.TRACKING_ITEMS, trackingItem.id);
-        await deleteDoc(docRef);
-        return;
+      if (!response.ok) {
+        throw new Error(data.error || `Tracking item not found (id: ${trackingId})`);
       }
-
-      // 2. Fallback: treat the argument as a raw Firestore document ID
-      const docRef = doc(db, FIRESTORE_COLLECTIONS.TRACKING_ITEMS, trackingId);
-      const docSnap = await getDoc(docRef);
-
-      if (!docSnap.exists()) {
-        throw new Error(`Tracking item not found (id: ${trackingId})`);
-      }
-
-      await deleteDoc(docRef);
     } catch (error: any) {
       console.error('Error deleting tracking item:', error);
       // Preserve the original error message instead of swallowing it
       throw new Error(error?.message ?? 'Failed to delete tracking item');
+    }
+  }
+
+  private async deletePublicTrackingProjection(trackingId?: string, trackingDocId?: string): Promise<void> {
+    if (trackingDocId) {
+      await deleteDoc(doc(db, FIRESTORE_COLLECTIONS.PUBLIC_TRACKING_ITEMS, trackingDocId)).catch(() => undefined);
+    }
+
+    if (trackingId) {
+      const q = query(
+        collection(db, FIRESTORE_COLLECTIONS.PUBLIC_TRACKING_ITEMS),
+        where('trackingId', '==', trackingId),
+        limit(5)
+      );
+      const querySnapshot = await getDocs(q);
+      await Promise.all(querySnapshot.docs.map((projection) => deleteDoc(projection.ref)));
     }
   }
 }

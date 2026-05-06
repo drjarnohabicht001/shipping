@@ -25,6 +25,7 @@ export interface CreateConversationRequest {
     userName: string;
     userEmail: string;
     initialMessage: string;
+    participantUid: string;
 }
 
 export interface SendMessageRequest {
@@ -90,11 +91,11 @@ class FirestoreChatService {
     /**
      * Check if a conversation exists for a user
      */
-    async getConversationByUserId(userId: string): Promise<FirestoreChatConversation | null> {
+    async getConversationByParticipantUid(participantUid: string): Promise<FirestoreChatConversation | null> {
         try {
             const q = query(
                 collection(db, FIRESTORE_COLLECTIONS.CHAT_CONVERSATIONS),
-                where('user.userId', '==', userId),
+                where('participantUid', '==', participantUid),
                 limit(1)
             );
 
@@ -110,7 +111,7 @@ class FirestoreChatService {
                 ...doc.data()
             } as FirestoreChatConversation;
         } catch (error) {
-            console.error('Error getting conversation by user ID:', error);
+            console.error('Error getting conversation by participant UID:', error);
             return null;
         }
     }
@@ -129,6 +130,7 @@ class FirestoreChatService {
 
             const conversationData: Omit<FirestoreChatConversation, 'id'> = {
                 conversationId,
+                participantUid: request.participantUid,
                 user: {
                     name: request.userName,
                     email: request.userEmail,

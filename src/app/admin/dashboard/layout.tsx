@@ -9,12 +9,16 @@ import {
   Users, 
   BarChart3, 
   Settings, 
+  Shield,
+  LogIn,
+  Monitor,
   LogOut, 
   Menu, 
   X,
   Bell,
   Search,
   User,
+  AlertTriangle,
   Download,
   FileText,
   MessageCircle
@@ -36,6 +40,9 @@ const navigation: NavigationItem[] = [
   { name: 'Quotes', href: '/admin/dashboard/quotes', icon: Package, permission: 'quotes.read' },
   { name: 'Messages', href: '/admin/messages', icon: MessageCircle },
   { name: 'Users', href: '/admin/dashboard/users', icon: Users, permission: 'users.read' },
+  { name: 'Security', href: '/admin/dashboard/security', icon: Shield, permission: 'security.read' },
+  { name: 'Sessions', href: '/admin/dashboard/sessions', icon: Monitor, permission: 'sessions.read' },
+  { name: 'Logins', href: '/admin/dashboard/logins', icon: LogIn, permission: 'logins.read' },
   //{ name: 'Audit Logs', href: '/admin/dashboard/audit', icon: FileText, permission: 'audit.read' },
   //{ name: 'Data Export', href: '/admin/dashboard/export', icon: Download, permission: 'read' },
   { name: 'Settings', href: '/admin/dashboard/settings', icon: Settings, permission: 'settings.read' },
@@ -78,6 +85,13 @@ export default function AdminDashboardLayout({
   const filteredNavigation = navigation.filter(item => 
     !item.permission || hasPermission(item.permission, 'read')
   );
+  const requiresSecurityAction =
+    user?.mustChangePassword || (user?.mfaRequired && !user?.mfaEnabled);
+  const securityRestrictedRoute =
+    requiresSecurityAction && pathname !== '/admin/dashboard/settings';
+  const restrictedNavigation = filteredNavigation.filter(
+    (item) => item.href === '/admin/dashboard/settings'
+  );
 
   return (
     <div className="h-screen bg-gray-50 flex">
@@ -113,7 +127,7 @@ export default function AdminDashboardLayout({
 
           {/* Navigation */}
           <nav className="flex-1 px-4 py-6 space-y-2">
-            {navigation.map((item) => {
+            {(securityRestrictedRoute ? restrictedNavigation : filteredNavigation).map((item) => {
               const isActive = pathname === item.href;
               return (
                 <a
@@ -163,6 +177,29 @@ export default function AdminDashboardLayout({
 
       {/* Main content */}
       <div className="flex-1 lg:ml-0 overflow-x-hidden">
+        {requiresSecurityAction && (
+          <div className="border-b border-amber-200 bg-amber-50 px-6 py-3">
+            <div className="flex flex-col gap-2 text-sm text-amber-900 md:flex-row md:items-center md:justify-between">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+                <div>
+                  <p className="font-medium">Security action required on this admin account.</p>
+                  <p className="text-amber-800">
+                    {user?.mustChangePassword
+                      ? 'Your password must be rotated before this account is considered secure.'
+                      : 'Multi-factor authentication is required for this account.'}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => router.push('/admin/dashboard/settings')}
+                className="rounded-md border border-amber-300 px-3 py-2 font-medium text-amber-900 hover:bg-amber-100"
+              >
+                Review Security Settings
+              </button>
+            </div>
+          </div>
+        )}
         {/* Top header */}
         <header className="bg-white shadow-sm border-b border-gray-200">
           <div className="flex items-center justify-between h-16 px-6">
@@ -174,7 +211,7 @@ export default function AdminDashboardLayout({
                 <Menu className="h-6 w-6 text-gray-400" />
               </button>
               <h1 className="text-xl font-semibold text-gray-900">
-                {navigation.find(item => item.href === pathname)?.name || 'Dashboard'}
+                {(securityRestrictedRoute ? 'Security Action Required' : filteredNavigation.find(item => item.href === pathname)?.name) || 'Dashboard'}
               </h1>
             </div>
 
@@ -209,7 +246,32 @@ export default function AdminDashboardLayout({
 
         {/* Page content */}
         <main className="p-6">
-          {children}
+          {securityRestrictedRoute ? (
+            <div className="mx-auto max-w-2xl rounded-xl border border-amber-200 bg-white p-8 shadow-sm">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="mt-1 h-5 w-5 text-amber-700" />
+                <div>
+                  <h2 className="text-xl font-semibold text-gray-900">Complete Required Security Setup</h2>
+                  <p className="mt-2 text-sm text-gray-600">
+                    This admin account is restricted until the required security step is completed.
+                  </p>
+                  <p className="mt-2 text-sm text-gray-700">
+                    {user?.mustChangePassword
+                      ? 'Rotate your password from the Security tab in Settings before continuing.'
+                      : 'Enroll a TOTP authenticator factor from the Security tab in Settings before continuing.'}
+                  </p>
+                  <Button
+                    className="mt-6"
+                    onClick={() => router.push('/admin/dashboard/settings')}
+                  >
+                    Go To Security Settings
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            children
+          )}
         </main>
       </div>
     </div>

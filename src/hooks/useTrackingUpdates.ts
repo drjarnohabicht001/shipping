@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import FirestoreTrackingService from '@/services/firestoreTrackingService';
-import { FirestoreTrackingItem } from '@/lib/firestore-schema';
+import { PublicTrackingItem } from '@/lib/firestore-schema';
 
 export interface UseTrackingUpdatesResult {
-  trackingItem: FirestoreTrackingItem | null;
+  trackingItem: PublicTrackingItem | null;
   loading: boolean;
   error: string | null;
   refetch: () => void;
@@ -18,7 +18,7 @@ export const useTrackingUpdates = (
   trackingId: string | null,
   enableRealTime: boolean = true
 ): UseTrackingUpdatesResult => {
-  const [trackingItem, setTrackingItem] = useState<FirestoreTrackingItem | null>(null);
+  const [trackingItem, setTrackingItem] = useState<PublicTrackingItem | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -35,7 +35,7 @@ export const useTrackingUpdates = (
     setError(null);
 
     try {
-      const item = await trackingService.getTrackingByTrackingId(trackingId);
+      const item = await trackingService.getPublicTrackingByTrackingId(trackingId);
       setTrackingItem(item);
       
       if (!item) {
@@ -63,11 +63,10 @@ export const useTrackingUpdates = (
     }
 
     if (enableRealTime) {
-      // Set up real-time subscription
       setLoading(true);
       setError(null);
 
-      const unsubscribe = trackingService.subscribeToTrackingUpdates(
+      const unsubscribe = trackingService.subscribeToPublicTrackingUpdates(
         trackingId,
         (item) => {
           setTrackingItem(item);
@@ -80,12 +79,10 @@ export const useTrackingUpdates = (
           }
         }
       );
-
       return () => {
         unsubscribe();
       };
     } else {
-      // Fetch once without real-time updates
       fetchTrackingItem();
     }
   }, [trackingId, enableRealTime, trackingService, fetchTrackingItem]);

@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
+import { onAuthStateChanged, signInAnonymously } from 'firebase/auth';
 import FirestoreChatService from '@/services/firestoreChatService';
 import { FirestoreChatMessage, FirestoreChatConversation } from '@/lib/firestore-schema';
+import { auth } from '@/lib/firebase';
 
-const STORAGE_KEY = 'chat_user_id';
 const USER_NAME_KEY = 'chat_user_name';
 const USER_EMAIL_KEY = 'chat_user_email';
 
@@ -24,36 +25,59 @@ export const useChatWidget = (): UseChatWidgetResult => {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [conversationId, setConversationId] = useState<string | null>(null);
-    const [userId, setUserId] = useState<string | null>(null);
+    const [participantUid, setParticipantUid] = useState<string | null>(null);
     const [userName, setUserName] = useState<string | null>(null);
     const [userEmail, setUserEmail] = useState<string | null>(null);
     const [unreadCount, setUnreadCount] = useState(0);
 
     const chatService = FirestoreChatService.getInstance();
 
-    // Load user info from localStorage on mount
+    useEffect(() => {
+        const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+            try {
+                const currentUser = firebaseUser ?? (await signInAnonymously(auth)).user;
+                setParticipantUid(currentUser.uid);
+
+                if (typeof window !== 'undefined') {
+                    const storedUserName = localStorage.getItem(USER_NAME_KEY);
+                    const storedUserEmail = localStorage.getItem(USER_EMAIL_KEY);
+
+                    if (storedUserName) {
+                        setUserName(storedUserName);
+                    }
+
+                    if (storedUserEmail) {
+                        setUserEmail(storedUserEmail);
+                    }
+                }
+
+                await loadConversation(currentUser.uid);
+            } catch (err) {
+                console.error('Error preparing chat identity:', err);
+                setError('Unable to initialize secure chat right now.');
+            }
+        });
+
+        return () => unsubscribe();
+    }, []);
+
     useEffect(() => {
         if (typeof window !== 'undefined') {
-            const storedUserId = localStorage.getItem(STORAGE_KEY);
             const storedUserName = localStorage.getItem(USER_NAME_KEY);
             const storedUserEmail = localStorage.getItem(USER_EMAIL_KEY);
 
-            if (storedUserId && storedUserName && storedUserEmail) {
-                setUserId(storedUserId);
+            if (storedUserName && storedUserEmail) {
                 setUserName(storedUserName);
                 setUserEmail(storedUserEmail);
-
-                // Load existing conversation
-                loadConversation(storedUserId);
             }
         }
     }, []);
 
     // Load conversation for returning user
-    const loadConversation = async (userId: string) => {
+    const loadConversation = async (uid: string) => {
         try {
             setIsLoading(true);
-            const conversation = await chatService.getConversationByUserId(userId);
+            const conversation = await chatService.getConversationByParticipantUid(uid);
 
             if (conversation) {
                 setConversationId(conversation.id);
@@ -103,17 +127,16 @@ export const useChatWidget = (): UseChatWidgetResult => {
             const { conversation, userId: newUserId } = await chatService.createConversation({
                 userName: name,
                 userEmail: email,
-                initialMessage
+                initialMessage,
+                participantUid: participantUid!,
             });
 
             // Store user info in localStorage
             if (typeof window !== 'undefined') {
-                localStorage.setItem(STORAGE_KEY, newUserId);
                 localStorage.setItem(USER_NAME_KEY, name);
                 localStorage.setItem(USER_EMAIL_KEY, email);
             }
 
-            setUserId(newUserId);
             setUserName(name);
             setUserEmail(email);
             setConversationId(conversation.id);
@@ -124,11 +147,11 @@ export const useChatWidget = (): UseChatWidgetResult => {
         } finally {
             setIsLoading(false);
         }
-    }, []);
+    }, [participantUid]);
 
     // Send message
     const sendMessage = useCallback(async (text: string) => {
-        if (!conversationId || !userId || !userName) {
+        if (!conversationId || !participantUid || !userName) {
             setError('Chat not initialized');
             return;
         }
@@ -140,14 +163,14 @@ export const useChatWidget = (): UseChatWidgetResult => {
                 text,
                 sender: 'user',
                 senderName: userName,
-                senderId: userId
+                senderId: participantUid
             });
         } catch (err) {
             console.error('Error sending message:', err);
             setError('Failed to send message. Please try again.');
             throw err;
         }
-    }, [conversationId, userId, userName]);
+    }, [conversationId, participantUid, userName]);
 
     return {
         isOpen,
@@ -155,7 +178,7 @@ export const useChatWidget = (): UseChatWidgetResult => {
         messages,
         isLoading,
         error,
-        hasUserInfo: !!userId,
+        hasUserInfo: !!participantUid && !!userName && !!userEmail,
         sendMessage,
         initializeChat,
         unreadCount

@@ -4,17 +4,26 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/Components/Button';
-import { Eye, EyeOff, Lock, Mail, AlertCircle } from 'lucide-react';
+import { Eye, EyeOff, Lock, Mail, AlertCircle, Shield } from 'lucide-react';
 import Image from 'next/image';
 import Logo from '../../../../public/svg/logo';
 
 export default function AdminLogin() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [mfaCode, setMfaCode] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   
-  const { login, isLoading, error, isAuthenticated } = useAuth();
+  const {
+    login,
+    completeMfaSignIn,
+    cancelMfaSignIn,
+    isLoading,
+    error,
+    isAuthenticated,
+    mfaChallenge,
+  } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
@@ -26,6 +35,11 @@ export default function AdminLogin() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     await login({ email, password });
+  };
+
+  const handleMfaSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await completeMfaSignIn(mfaCode);
   };
 
   return (
@@ -60,95 +74,148 @@ export default function AdminLogin() {
             </div>
           )}
 
-          {/* Login Form */}
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Email Field */}
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
-                Email Address
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Mail className="h-5 w-5 text-gray-400" />
+          {!mfaChallenge ? (
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div>
+                <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
+                  Email Address
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Mail className="h-5 w-5 text-gray-400" />
+                  </div>
+                  <input
+                    id="email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FF5A24] focus:border-[#FF5A24] transition-colors"
+                    placeholder="Enter your email"
+                    required
+                  />
                 </div>
-                <input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FF5A24] focus:border-[#FF5A24] transition-colors"
-                  placeholder="Enter your email"
-                  required
-                />
               </div>
-            </div>
 
-            {/* Password Field */}
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
-                Password
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Lock className="h-5 w-5 text-gray-400" />
+              <div>
+                <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
+                  Password
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Lock className="h-5 w-5 text-gray-400" />
+                  </div>
+                  <input
+                    id="password"
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="block w-full pl-10 pr-12 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FF5A24] focus:border-[#FF5A24] transition-colors"
+                    placeholder="Enter your password"
+                    required
+                  />
+                  <button
+                    type="button"
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                    onClick={() => setShowPassword(!showPassword)}
+                  >
+                    {showPassword ? (
+                      <EyeOff className="h-5 w-5 text-gray-400 hover:text-gray-600" />
+                    ) : (
+                      <Eye className="h-5 w-5 text-gray-400 hover:text-gray-600" />
+                    )}
+                  </button>
                 </div>
-                <input
-                  id="password"
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="block w-full pl-10 pr-12 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FF5A24] focus:border-[#FF5A24] transition-colors"
-                  placeholder="Enter your password"
-                  required
-                />
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <input
+                    id="remember-me"
+                    type="checkbox"
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
+                    className="h-4 w-4 text-[#FF5A24] focus:ring-[#FF5A24] border-gray-300 rounded"
+                  />
+                  <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-700">
+                    Remember me
+                  </label>
+                </div>
                 <button
                   type="button"
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center"
-                  onClick={() => setShowPassword(!showPassword)}
+                  className="text-sm text-[#FF5A24] hover:text-[#e54a1f] transition-colors"
                 >
-                  {showPassword ? (
-                    <EyeOff className="h-5 w-5 text-gray-400 hover:text-gray-600" />
-                  ) : (
-                    <Eye className="h-5 w-5 text-gray-400 hover:text-gray-600" />
-                  )}
+                  Forgot password?
                 </button>
               </div>
-            </div>
 
-            {/* Remember Me */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center">
-                <input
-                  id="remember-me"
-                  type="checkbox"
-                  checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
-                  className="h-4 w-4 text-[#FF5A24] focus:ring-[#FF5A24] border-gray-300 rounded"
-                />
-                <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-700">
-                  Remember me
-                </label>
-              </div>
-              <button
-                type="button"
-                className="text-sm text-[#FF5A24] hover:text-[#e54a1f] transition-colors"
+              <Button
+                type="submit"
+                variant="primary"
+                size="lg"
+                fullWidth
+                isLoading={isLoading}
+                className="py-3 text-base font-semibold"
               >
-                Forgot password?
-              </button>
-            </div>
+                {isLoading ? 'Signing in...' : 'Sign In'}
+              </Button>
+            </form>
+          ) : (
+            <form onSubmit={handleMfaSubmit} className="space-y-6">
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+                <div className="flex items-start gap-3">
+                  <Shield className="mt-0.5 h-5 w-5 text-amber-700" />
+                  <div>
+                    <p className="font-medium text-amber-900">Multi-factor authentication required</p>
+                    <p className="mt-1 text-sm text-amber-800">
+                      Enter the code from your authenticator app for `{mfaChallenge.email}`.
+                    </p>
+                  </div>
+                </div>
+              </div>
 
-            {/* Submit Button */}
-            <Button
-              type="submit"
-              variant="primary"
-              size="lg"
-              fullWidth
-              isLoading={isLoading}
-              className="py-3 text-base font-semibold"
-            >
-              {isLoading ? 'Signing in...' : 'Sign In'}
-            </Button>
-          </form>
+              <div>
+                <label htmlFor="mfa-code" className="block text-sm font-medium text-gray-700 mb-2">
+                  Authenticator Code
+                </label>
+                <input
+                  id="mfa-code"
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  value={mfaCode}
+                  onChange={(e) => setMfaCode(e.target.value.replace(/\s+/g, ''))}
+                  className="block w-full px-4 py-3 border border-gray-300 rounded-lg tracking-[0.3em] text-center text-lg focus:ring-2 focus:ring-[#FF5A24] focus:border-[#FF5A24] transition-colors"
+                  placeholder="123456"
+                  required
+                />
+                {mfaChallenge.displayName && (
+                  <p className="mt-2 text-xs text-gray-500">
+                    Factor: {mfaChallenge.displayName}
+                  </p>
+                )}
+              </div>
+
+              <div className="flex gap-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  fullWidth
+                  onClick={cancelMfaSignIn}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  fullWidth
+                  isLoading={isLoading}
+                  className="py-3 text-base font-semibold"
+                >
+                  {isLoading ? 'Verifying...' : 'Verify Code'}
+                </Button>
+              </div>
+            </form>
+          )}
 
           {/* Footer */}
           <div className="mt-8 text-center">
