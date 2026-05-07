@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/Components/Button';
 import { auth } from '@/lib/firebase';
@@ -64,6 +65,7 @@ interface MfaStatus {
 
 export default function SettingsPage() {
   const { user } = useAuth();
+  const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState('profile');
   const [securityProfile, setSecurityProfile] = useState<SecurityProfile | null>(null);
   const [securityLoading, setSecurityLoading] = useState(true);
@@ -80,6 +82,7 @@ export default function SettingsPage() {
   const [totpQrUrl, setTotpQrUrl] = useState<string | null>(null);
   const [totpVerificationCode, setTotpVerificationCode] = useState('');
   const [mfaDisplayName, setMfaDisplayName] = useState('Shipping Admin TOTP');
+  const [totpUnsupportedReason, setTotpUnsupportedReason] = useState<string | null>(null);
   const [settings, setSettings] = useState({
     emailNotifications: true,
     pushNotifications: false,
@@ -88,6 +91,13 @@ export default function SettingsPage() {
     timezone: 'UTC',
     language: 'en'
   });
+
+  useEffect(() => {
+    const requestedTab = searchParams.get('tab');
+    if (requestedTab && ['profile', 'notifications', 'security', 'system'].includes(requestedTab)) {
+      setActiveTab(requestedTab);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     const loadSecurityProfile = async () => {
@@ -102,6 +112,9 @@ export default function SettingsPage() {
 
         const data = await response.json();
         setSecurityProfile(data.profile);
+        if (data.profile?.mustChangePassword) {
+          setActiveTab('security');
+        }
         setCurrentSessionId(data.profile?.sessionId ?? null);
         setSettings((current) => ({
           ...current,
@@ -256,28 +269,49 @@ export default function SettingsPage() {
     try {
       setMfaActionLoading(true);
       setSecurityError(null);
-      const response = await fetch('/api/admin/security/mfa', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ action: 'enable_project_totp' }),
-      });
+      await requestProjectTotpEnable();
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Unable to enable TOTP MFA for this Firebase project.';
 
-      if (!response.ok) {
-        throw new Error('Failed to enable TOTP MFA');
+      if (message.includes('cannot enable TOTP MFA yet')) {
+        setTotpUnsupportedReason(message);
+      } else {
+        console.error(error);
       }
 
-      const data = await response.json();
-      setMfaStatus({
-        projectTotpEnabled: data.projectTotpEnabled,
-        enrolledFactors: data.enrolledFactors ?? [],
-      });
-    } catch (error) {
-      console.error(error);
-      setSecurityError('Unable to enable TOTP MFA for this Firebase project.');
+      setSecurityError(message);
     } finally {
       setMfaActionLoading(false);
     }
+  };
+
+  const requestProjectTotpEnable = async () => {
+    const response = await fetch('/api/admin/security/mfa', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ action: 'enable_project_totp' }),
+    });
+
+    if (!response.ok) {
+      const errorPayload = await response.json().catch(() => null);
+      const errorMessage =
+        errorPayload?.error && typeof errorPayload.error === 'string'
+          ? errorPayload.error
+          : 'Failed to enable TOTP MFA';
+      throw new Error(errorMessage);
+    }
+
+    const data = await response.json();
+    const nextStatus = {
+      projectTotpEnabled: data.projectTotpEnabled,
+      enrolledFactors: data.enrolledFactors ?? [],
+    };
+    setMfaStatus(nextStatus);
+    return nextStatus;
   };
 
   const beginTotpEnrollment = async () => {
@@ -286,12 +320,28 @@ export default function SettingsPage() {
         throw new Error('You must be signed in to enroll MFA.');
       }
 
-      if (!mfaStatus?.projectTotpEnabled) {
+      setMfaActionLoading(true);
+      setSecurityError(null);
+      let currentMfaStatus = mfaStatus;
+
+      if (totpUnsupportedReason) {
+        throw new Error(totpUnsupportedReason);
+      }
+
+      if (!currentMfaStatus?.projectTotpEnabled) {
+        if (user?.accessLevel !== 'system_admin') {
+          throw new Error(
+            'A system admin must enable project TOTP before this account can enroll an authenticator app.'
+          );
+        }
+
+        currentMfaStatus = await requestProjectTotpEnable();
+      }
+
+      if (!currentMfaStatus?.projectTotpEnabled) {
         throw new Error('TOTP MFA is not enabled for this project yet.');
       }
 
-      setMfaActionLoading(true);
-      setSecurityError(null);
       const enrollmentSession = await multiFactor(auth.currentUser).getSession();
       const secret = await TotpMultiFactorGenerator.generateSecret(enrollmentSession);
       setTotpSecret(secret);
@@ -303,10 +353,16 @@ export default function SettingsPage() {
       );
       setTotpVerificationCode('');
     } catch (error) {
-      console.error(error);
-      setSecurityError(
-        error instanceof Error ? error.message : 'Unable to start MFA enrollment.'
-      );
+      const message =
+        error instanceof Error ? error.message : 'Unable to start MFA enrollment.';
+
+      if (message.includes('cannot enable TOTP MFA yet')) {
+        setTotpUnsupportedReason(message);
+      } else {
+        console.error(error);
+      }
+
+      setSecurityError(message);
     } finally {
       setMfaActionLoading(false);
     }
@@ -445,9 +501,6 @@ export default function SettingsPage() {
     if (securityProfile.mustChangePassword) {
       alerts.push('Password rotation is required before this account is considered compliant.');
     }
-    if (securityProfile.mfaRequired && !securityProfile.mfaEnabled) {
-      alerts.push('Multi-factor authentication is required but is not yet enabled on this account.');
-    }
     if (securityProfile.passwordRotationDueAt) {
       const dueDate = new Date(securityProfile.passwordRotationDueAt);
       if (dueDate.getTime() < Date.now()) {
@@ -461,6 +514,24 @@ export default function SettingsPage() {
     value ? new Date(value).toLocaleString() : 'Not available';
   const formatTimestamp = (timestamp?: { seconds: number }) =>
     timestamp?.seconds ? new Date(timestamp.seconds * 1000).toLocaleString() : 'Not available';
+  const mfaUnavailableMessage =
+    totpUnsupportedReason ??
+    'Authenticator app MFA is disabled for this project because the current Firebase Authentication setup does not support project-level TOTP.';
+  const isTwoFactorEnabled =
+    (mfaStatus?.enrolledFactors?.length ?? 0) > 0 || securityProfile?.mfaEnabled || false;
+
+  const handleTwoFactorToggle = async (nextChecked: boolean) => {
+    setSecurityError(null);
+
+    if (nextChecked) {
+      await beginTotpEnrollment();
+      return;
+    }
+
+    if (isTwoFactorEnabled) {
+      setSecurityError('To disable MFA, remove the enrolled authenticator factor below.');
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -650,34 +721,26 @@ export default function SettingsPage() {
                       <Lock className="h-5 w-5 text-gray-400" />
                       <div>
                         <p className="font-medium text-gray-900">Two-Factor Authentication</p>
-                        <p className="text-sm text-gray-500">Add an extra layer of security</p>
+                        <p className="text-sm text-gray-500">
+                          Disabled for this project.
+                        </p>
                       </div>
                     </div>
                     <input
                       type="checkbox"
-                      checked={settings.twoFactorAuth}
+                      checked={isTwoFactorEnabled}
                       readOnly
+                      disabled
                       className="h-4 w-4 text-[#FF5A24] focus:ring-[#FF5A24] border-gray-300 rounded"
                     />
                   </div>
 
                   <div className="rounded-lg border border-gray-200 p-4">
-                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                      <div>
-                        <p className="font-medium text-gray-900">Authenticator App (TOTP)</p>
-                        <p className="text-sm text-gray-500">
-                          Use an authenticator app such as Google Authenticator, 1Password, or Authy.
-                        </p>
-                      </div>
-                      {!mfaStatus?.projectTotpEnabled && user?.accessLevel === 'system_admin' && (
-                        <Button
-                          variant="outline"
-                          onClick={enableProjectTotp}
-                          isLoading={mfaActionLoading}
-                        >
-                          Enable Project TOTP
-                        </Button>
-                      )}
+                    <div>
+                      <p className="font-medium text-gray-900">Authenticator App (TOTP)</p>
+                      <p className="text-sm text-gray-500">
+                        Authenticator-based MFA controls are not available in this project.
+                      </p>
                     </div>
 
                     <div className="mt-4 space-y-4">
@@ -685,104 +748,38 @@ export default function SettingsPage() {
                         Project TOTP provider: <span className="font-medium">{mfaLoading ? 'Loading...' : mfaStatus?.projectTotpEnabled ? 'Enabled' : 'Disabled'}</span>
                       </div>
 
-                      {(mfaStatus?.enrolledFactors?.length ?? 0) > 0 ? (
-                        <div className="space-y-3">
-                          {mfaStatus?.enrolledFactors.map((factor) => (
-                            <div
-                              key={factor.uid}
-                              className="flex flex-col gap-3 rounded-md border border-gray-200 p-4 md:flex-row md:items-center md:justify-between"
-                            >
-                              <div>
-                                <div className="flex items-center gap-2">
-                                  <Smartphone className="h-4 w-4 text-[#FF5A24]" />
-                                  <p className="font-medium text-gray-900">
-                                    {factor.displayName || 'Authenticator App'}
-                                  </p>
-                                </div>
-                                <p className="mt-1 text-sm text-gray-500">Factor ID: {factor.factorId}</p>
-                                <p className="mt-1 text-sm text-gray-500">
-                                  Enrolled: {formatDate(factor.enrollmentTime)}
-                                </p>
-                              </div>
-                              <Button
-                                variant="outline"
-                                onClick={() => unenrollFactor(factor.uid)}
-                                isLoading={mfaActionLoading}
-                                className="border-red-200 text-red-700 hover:bg-red-50"
-                              >
-                                <Ban className="mr-2 h-4 w-4" />
-                                Remove Factor
-                              </Button>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="rounded-md border border-dashed border-gray-200 p-4 text-sm text-gray-500">
-                          No MFA factor is enrolled on this account yet.
-                        </div>
-                      )}
+                      <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                        {mfaUnavailableMessage}
+                      </div>
 
-                      {totpSecret ? (
-                        <div className="space-y-4 rounded-lg border border-[#FF5A24]/20 bg-orange-50 p-4">
-                          <div className="flex items-center gap-2 text-[#FF5A24]">
-                            <QrCode className="h-4 w-4" />
-                            <p className="font-medium">Complete TOTP Enrollment</p>
-                          </div>
-                          <div className="space-y-2 text-sm text-gray-700">
-                            <p>1. Scan this QR code URL in your authenticator app, or copy the secret key manually.</p>
-                            <a
-                              href={totpQrUrl ?? '#'}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="break-all text-[#FF5A24] underline"
-                            >
-                              {totpQrUrl}
-                            </a>
-                            <p>Secret key: <span className="font-mono">{totpSecret.secretKey}</span></p>
-                          </div>
-                          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                            <input
-                              type="text"
-                              value={mfaDisplayName}
-                              onChange={(e) => setMfaDisplayName(e.target.value)}
-                              className="w-full rounded-md border border-gray-300 px-3 py-2 focus:border-[#FF5A24] focus:ring-[#FF5A24]"
-                              placeholder="Factor display name"
-                            />
-                            <input
-                              type="text"
-                              inputMode="numeric"
-                              autoComplete="one-time-code"
-                              value={totpVerificationCode}
-                              onChange={(e) => setTotpVerificationCode(e.target.value.replace(/\s+/g, ''))}
-                              className="w-full rounded-md border border-gray-300 px-3 py-2 tracking-[0.3em] focus:border-[#FF5A24] focus:ring-[#FF5A24]"
-                              placeholder="123456"
-                            />
-                          </div>
-                          <div className="flex gap-3">
-                            <Button variant="outline" onClick={cancelTotpEnrollment} fullWidth>
-                              Cancel
-                            </Button>
-                            <Button
-                              onClick={confirmTotpEnrollment}
-                              isLoading={mfaActionLoading}
-                              fullWidth
-                            >
-                              Verify And Enroll
-                            </Button>
-                          </div>
-                        </div>
-                      ) : (
-                        <Button
-                          variant="outline"
-                          onClick={beginTotpEnrollment}
-                          isLoading={mfaActionLoading}
-                          disabled={!mfaStatus?.projectTotpEnabled}
-                        >
-                          Start TOTP Setup
-                        </Button>
-                      )}
+                      <div className="rounded-md border border-dashed border-gray-200 p-4 text-sm text-gray-500">
+                        TOTP setup and enrollment are intentionally disabled in the Settings UI for this project.
+                      </div>
                     </div>
                   </div>
+
+                  {securityProfile?.mustChangePassword && (
+                    <div className="rounded-lg border border-red-200 bg-red-50 p-4">
+                      <div className="flex items-start gap-3">
+                        <KeyRound className="mt-0.5 h-5 w-5 text-red-600" />
+                        <div className="space-y-2">
+                          <p className="font-medium text-red-900">Password rotation is required now</p>
+                          <p className="text-sm text-red-800">
+                            This account cannot move forward until you create a new password.
+                          </p>
+                          <p className="text-sm text-red-800">
+                            1. Click `Generate Reset Link` below.
+                          </p>
+                          <p className="text-sm text-red-800">
+                            2. Open the one-time link that appears.
+                          </p>
+                          <p className="text-sm text-red-800">
+                            3. Set a new password and sign in again.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   <div className="rounded-lg border border-gray-200 p-4">
                     <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">

@@ -47,7 +47,13 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to update MFA state.";
     const status =
-      message === "Forbidden" ? 403 : message === "MFA_REQUIRED" ? 428 : 500;
+      message === "Forbidden"
+        ? 403
+        : message === "MFA_REQUIRED"
+          ? 428
+          : message.includes("cannot enable TOTP MFA yet")
+            ? 409
+            : 500;
     return NextResponse.json({ error: message }, { status });
   }
 }

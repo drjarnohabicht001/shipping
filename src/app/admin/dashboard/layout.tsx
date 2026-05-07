@@ -85,8 +85,7 @@ export default function AdminDashboardLayout({
   const filteredNavigation = navigation.filter(item => 
     !item.permission || hasPermission(item.permission, 'read')
   );
-  const requiresSecurityAction =
-    user?.mustChangePassword || (user?.mfaRequired && !user?.mfaEnabled);
+  const requiresSecurityAction = user?.mustChangePassword;
   const securityRestrictedRoute =
     requiresSecurityAction && pathname !== '/admin/dashboard/settings';
   const restrictedNavigation = filteredNavigation.filter(
@@ -185,14 +184,12 @@ export default function AdminDashboardLayout({
                 <div>
                   <p className="font-medium">Security action required on this admin account.</p>
                   <p className="text-amber-800">
-                    {user?.mustChangePassword
-                      ? 'Your password must be rotated before this account is considered secure.'
-                      : 'Multi-factor authentication is required for this account.'}
+                    Your password must be rotated before this account is considered secure.
                   </p>
                 </div>
               </div>
               <button
-                onClick={() => router.push('/admin/dashboard/settings')}
+                onClick={() => router.push('/admin/dashboard/settings?tab=security')}
                 className="rounded-md border border-amber-300 px-3 py-2 font-medium text-amber-900 hover:bg-amber-100"
               >
                 Review Security Settings
@@ -256,13 +253,11 @@ export default function AdminDashboardLayout({
                     This admin account is restricted until the required security step is completed.
                   </p>
                   <p className="mt-2 text-sm text-gray-700">
-                    {user?.mustChangePassword
-                      ? 'Rotate your password from the Security tab in Settings before continuing.'
-                      : 'Enroll a TOTP authenticator factor from the Security tab in Settings before continuing.'}
+                    Rotate your password from the Security tab in Settings before continuing.
                   </p>
                   <Button
                     className="mt-6"
-                    onClick={() => router.push('/admin/dashboard/settings')}
+                    onClick={() => router.push('/admin/dashboard/settings?tab=security')}
                   >
                     Go To Security Settings
                   </Button>

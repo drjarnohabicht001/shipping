@@ -1,14 +1,15 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/Components/Button';
 import { Eye, EyeOff, Lock, Mail, AlertCircle, Shield } from 'lucide-react';
 import Image from 'next/image';
 import Logo from '../../../../public/svg/logo';
 
-export default function AdminLogin() {
+function AdminLoginContent() {
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [mfaCode, setMfaCode] = useState('');
@@ -25,12 +26,20 @@ export default function AdminLogin() {
     mfaChallenge,
   } = useAuth();
   const router = useRouter();
+  const passwordResetSucceeded = searchParams.get('passwordReset') === 'success';
 
   useEffect(() => {
     if (isAuthenticated) {
       router.push('/admin/dashboard');
     }
   }, [isAuthenticated, router]);
+
+  useEffect(() => {
+    const resetEmail = searchParams.get('email');
+    if (resetEmail) {
+      setEmail(resetEmail);
+    }
+  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -67,6 +76,14 @@ export default function AdminLogin() {
           </div> */}
 
           {/* Error Message */}
+          {passwordResetSucceeded && (
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
+              <span className="text-sm text-green-700">
+                Password reset completed. Sign in with your new password to continue.
+              </span>
+            </div>
+          )}
+
           {error && (
             <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6 flex items-center gap-2">
               <AlertCircle className="h-4 w-4 text-red-600" />
@@ -226,5 +243,13 @@ export default function AdminLogin() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function AdminLogin() {
+  return (
+    <Suspense fallback={null}>
+      <AdminLoginContent />
+    </Suspense>
   );
 }

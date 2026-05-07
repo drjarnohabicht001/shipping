@@ -39,6 +39,19 @@ function getRequestMetadata(headers: Headers) {
   return { ipAddress, userAgent };
 }
 
+function parseUtcTime(value?: string | null) {
+  if (!value) {
+    return null;
+  }
+
+  const millis = Date.parse(value);
+  if (Number.isNaN(millis)) {
+    return null;
+  }
+
+  return Timestamp.fromMillis(millis);
+}
+
 async function getAdminUserOrThrow(uid: string) {
   const adminUserSnap = await getFirebaseAdminDb()
     .collection(FIRESTORE_COLLECTIONS.ADMIN_USERS)
@@ -65,20 +78,51 @@ async function synchronizeAdminMfaState(adminUser: FirestoreAdminUser) {
   const userRecord = await getFirebaseAdminAuth().getUser(adminUser.uid);
   const hasEnrolledFactor =
     (userRecord.multiFactor?.enrolledFactors?.length ?? 0) > 0;
+  const passwordUpdatedAt = parseUtcTime(userRecord.tokensValidAfterTime ?? null);
+  const passwordResetIssuedAt = adminUser.passwordResetIssuedAt?.toMillis?.() ?? 0;
+  const passwordWasResetAfterIssuedLink =
+    Boolean(adminUser.mustChangePassword) &&
+    passwordResetIssuedAt > 0 &&
+    Boolean(passwordUpdatedAt) &&
+    (passwordUpdatedAt?.toMillis() ?? 0) > passwordResetIssuedAt;
+  const syncUpdates: Partial<FirestoreAdminUser> & {
+    updatedAt?: Timestamp;
+    updatedBy?: string;
+  } = {};
 
   if (adminUser.twoFactorEnabled !== hasEnrolledFactor) {
+    adminUser.twoFactorEnabled = hasEnrolledFactor;
+    syncUpdates.twoFactorEnabled = hasEnrolledFactor;
+  }
+
+  if (passwordWasResetAfterIssuedLink && passwordUpdatedAt) {
+    const nextPasswordRotationDueAt = Timestamp.fromMillis(
+      passwordUpdatedAt.toMillis() + 1000 * 60 * 60 * 24 * 30
+    ) as unknown as FirestoreAdminUser["passwordRotationDueAt"];
+
+    adminUser.mustChangePassword = false;
+    adminUser.lastPasswordChange = passwordUpdatedAt as unknown as FirestoreAdminUser["lastPasswordChange"];
+    adminUser.passwordRotationDueAt = nextPasswordRotationDueAt;
+    adminUser.passwordResetIssuedAt = undefined;
+    syncUpdates.mustChangePassword = false;
+    syncUpdates.lastPasswordChange =
+      passwordUpdatedAt as unknown as FirestoreAdminUser["lastPasswordChange"];
+    syncUpdates.passwordRotationDueAt = nextPasswordRotationDueAt;
+    syncUpdates.passwordResetIssuedAt = null as unknown as FirestoreAdminUser["passwordResetIssuedAt"];
+  }
+
+  if (Object.keys(syncUpdates).length > 0) {
     await getFirebaseAdminDb()
       .collection(FIRESTORE_COLLECTIONS.ADMIN_USERS)
       .doc(adminUser.uid)
       .set(
         {
-          twoFactorEnabled: hasEnrolledFactor,
+          ...syncUpdates,
           updatedAt: Timestamp.now(),
-          updatedBy: "session-mfa-sync",
+          updatedBy: passwordWasResetAfterIssuedLink ? "password-reset-sync" : "session-mfa-sync",
         },
         { merge: true }
       );
-    adminUser.twoFactorEnabled = hasEnrolledFactor;
   }
 
   return adminUser;

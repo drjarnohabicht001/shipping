@@ -17,6 +17,7 @@ export interface FirestoreAdminUser {
   mustChangePassword?: boolean;
   lastPasswordChange: Timestamp;
   passwordRotationDueAt?: Timestamp;
+  passwordResetIssuedAt?: Timestamp;
 
   // Profile Information
   avatar?: string;

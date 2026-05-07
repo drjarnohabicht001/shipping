@@ -265,7 +265,7 @@ export class AdminUserService {
         id: crypto.randomUUID(),
         action: 'ADMIN_LOGIN',
         timestamp: now,
-        ipAddress,
+        ...(ipAddress ? { ipAddress } : {}),
         details: { loginTime: now },
         severity: 'low'
       };

@@ -24,6 +24,28 @@ function getAlertSeverity(level: number): SecurityAlertRecord["severity"] {
   return "low";
 }
 
+function getErrorCode(error: unknown) {
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "errorInfo" in error &&
+    typeof (error as { errorInfo?: { code?: unknown } }).errorInfo?.code === "string"
+  ) {
+    return (error as { errorInfo: { code: string } }).errorInfo.code;
+  }
+
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    typeof (error as { code?: unknown }).code === "string"
+  ) {
+    return (error as { code: string }).code;
+  }
+
+  return undefined;
+}
+
 export async function requireSystemAdminSession(options?: { allowWithoutMfa?: boolean }) {
   const session = await verifyAdminSessionFromCookies();
 
@@ -220,14 +242,19 @@ export async function listUserSessions(userId: string, limitCount = 20) {
   const snapshot = await getFirebaseAdminDb()
     .collection(FIRESTORE_COLLECTIONS.ADMIN_SESSIONS)
     .where("userId", "==", userId)
-    .orderBy("createdAt", "desc")
-    .limit(limitCount)
     .get();
 
-  return snapshot.docs.map((doc) => ({
+  const sessions = snapshot.docs.map((doc) => ({
     id: doc.id,
     ...doc.data(),
   })) as AdminSessionRecord[];
+
+  return sessions
+    .map((doc) => ({
+      ...doc,
+    }))
+    .sort((left, right) => toMillis(right.createdAt) - toMillis(left.createdAt))
+    .slice(0, limitCount);
 }
 
 export async function revokeOwnSession(
@@ -323,21 +350,33 @@ export async function ensureTotpProjectMfaEnabled(userId: string) {
     (config) => config.totpProviderConfig === undefined
   );
 
-  await auth.projectConfigManager().updateProjectConfig({
-    multiFactorConfig: {
-      state: "ENABLED",
-      factorIds: currentConfig.multiFactorConfig?.factorIds,
-      providerConfigs: [
-        ...filteredProviders,
-        {
-          state: "ENABLED",
-          totpProviderConfig: {
-            adjacentIntervals: 1,
+  try {
+    await auth.projectConfigManager().updateProjectConfig({
+      multiFactorConfig: {
+        state: "ENABLED",
+        factorIds: currentConfig.multiFactorConfig?.factorIds,
+        providerConfigs: [
+          ...filteredProviders,
+          {
+            state: "ENABLED",
+            totpProviderConfig: {
+              adjacentIntervals: 1,
+            },
           },
-        },
-      ],
-    },
-  });
+        ],
+      },
+    });
+  } catch (error) {
+    const code = getErrorCode(error);
+
+    if (code === "auth/operation-not-allowed") {
+      throw new Error(
+        "This Firebase project cannot enable TOTP MFA yet. Upgrade Firebase Authentication to the required aligned product/GCIP tier, then try again."
+      );
+    }
+
+    throw error;
+  }
 
   return getCurrentAdminMfaState(userId);
 }

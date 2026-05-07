@@ -149,6 +149,47 @@ function mapAdminUserToUser(adminUser: FirestoreAdminUser): User {
   };
 }
 
+function mapSessionUserToUser(sessionUser: {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+  accessLevel?: string;
+  lastLogin?: string | null;
+  lastActivity?: string | null;
+  isActive: boolean;
+  mfaEnabled?: boolean;
+  mfaRequired?: boolean;
+  mustChangePassword?: boolean;
+  passwordRotationDueAt?: string | null;
+  sessionId?: string | null;
+  permissions?: Permission[];
+}): User {
+  return {
+    id: sessionUser.id,
+    email: sessionUser.email,
+    name: sessionUser.name,
+    role:
+      sessionUser.role === UserRole.SYSTEM_ADMIN
+        ? UserRole.SYSTEM_ADMIN
+        : UserRole.ADMIN,
+    accessLevel: sessionUser.accessLevel as User["accessLevel"],
+    avatar: "/img/testimonials-1.webp",
+    createdAt: new Date(),
+    lastLogin: sessionUser.lastLogin ? new Date(sessionUser.lastLogin) : undefined,
+    lastActivity: sessionUser.lastActivity ? new Date(sessionUser.lastActivity) : undefined,
+    isActive: sessionUser.isActive,
+    sessionId: sessionUser.sessionId ?? undefined,
+    mfaEnabled: sessionUser.mfaEnabled,
+    mfaRequired: sessionUser.mfaRequired,
+    mustChangePassword: sessionUser.mustChangePassword,
+    passwordRotationDueAt: sessionUser.passwordRotationDueAt
+      ? new Date(sessionUser.passwordRotationDueAt)
+      : undefined,
+    permissions: sessionUser.permissions ?? [],
+  };
+}
+
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({
   children,
 }) => {
@@ -169,7 +210,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
         throw new Error("Account is inactive or locked");
       }
 
-      const user = mapAdminUserToUser(adminUser);
       const idToken = await firebaseUser.getIdToken();
       const sessionResponse = await fetch("/api/auth/session", {
         method: "POST",
@@ -184,6 +224,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
         await signOut(auth);
         throw new Error("Unable to establish a secure admin session");
       }
+
+      const sessionData = await sessionResponse.json();
+      const user = sessionData?.user
+        ? mapSessionUserToUser(sessionData.user)
+        : mapAdminUserToUser(adminUser);
 
       adminUserService.updateLastLogin(firebaseUser.uid).catch(console.error);
       mfaResolverRef.current = null;
