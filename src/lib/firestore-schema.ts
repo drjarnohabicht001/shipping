@@ -146,8 +146,6 @@ export interface FirestoreTrackingItem {
   // Recipient Information
   recipient: {
     name: string;
-    email: string;
-    phone?: string;
     address: {
       street: string;
       city: string;

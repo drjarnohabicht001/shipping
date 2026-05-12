@@ -4,13 +4,43 @@ import { FIRESTORE_COLLECTIONS } from "@/lib/firestore-schema";
 import { verifyAdminSessionFromCookies } from "@/lib/server-auth";
 
 function getAppBaseUrl(request: NextRequest) {
-  const protocol =
-    request.headers.get("x-forwarded-proto") ??
-    (process.env.NODE_ENV === "production" ? "https" : "http");
-  const host =
-    request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? "localhost:3000";
+  const configuredBaseUrl =
+    process.env.APP_BASE_URL?.trim() || process.env.NEXT_PUBLIC_APP_URL?.trim();
 
-  return `${protocol}://${host}`;
+  if (configuredBaseUrl) {
+    return configuredBaseUrl.replace(/\/+$/, "");
+  }
+
+  return request.nextUrl.origin;
+}
+
+function getPasswordResetContinueUrl(request: NextRequest, email: string) {
+  const continueUrl = new URL("/admin/login", getAppBaseUrl(request));
+  continueUrl.searchParams.set("passwordReset", "success");
+  continueUrl.searchParams.set("email", email);
+  return continueUrl.toString();
+}
+
+function getErrorCode(error: unknown) {
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "errorInfo" in error &&
+    typeof (error as { errorInfo?: { code?: unknown } }).errorInfo?.code === "string"
+  ) {
+    return (error as { errorInfo: { code: string } }).errorInfo.code;
+  }
+
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    typeof (error as { code?: unknown }).code === "string"
+  ) {
+    return (error as { code: string }).code;
+  }
+
+  return undefined;
 }
 
 export async function POST(request: NextRequest) {
@@ -22,9 +52,7 @@ export async function POST(request: NextRequest) {
     }
 
     const now = new Date();
-    const continueUrl = `${getAppBaseUrl(request)}/admin/login?passwordReset=success&email=${encodeURIComponent(
-      session.email
-    )}`;
+    const continueUrl = getPasswordResetContinueUrl(request, session.email);
     const resetLink = await getFirebaseAdminAuth().generatePasswordResetLink(
       session.email,
       {
@@ -62,10 +90,20 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ resetLink });
   } catch (error) {
+    const code = getErrorCode(error);
+    const message =
+      code === "auth/unauthorized-continue-uri" || code === "auth/invalid-continue-uri"
+        ? "Password reset link generation failed because the production app URL is not authorized in Firebase Auth. Set APP_BASE_URL to your public https:// domain and add that domain to Firebase Authentication authorized domains."
+        : "Unable to generate password reset link.";
     console.error("Password reset link generation failed:", error);
     return NextResponse.json(
-      { error: "Unable to generate password reset link." },
-      { status: 500 }
+      { error: message },
+      {
+        status:
+          code === "auth/unauthorized-continue-uri" || code === "auth/invalid-continue-uri"
+            ? 400
+            : 500,
+      }
     );
   }
 }

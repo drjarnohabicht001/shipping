@@ -36,8 +36,6 @@ const CreateTrackingModal: React.FC<CreateTrackingModalProps> = ({ isOpen, onClo
     },
     recipient: {
       name: '',
-      email: '',
-      phone: '',
       companyName: '',
       address: {
         street: '',
@@ -95,8 +93,6 @@ const CreateTrackingModal: React.FC<CreateTrackingModalProps> = ({ isOpen, onClo
         },
         recipient: {
           name: '',
-          email: '',
-          phone: '',
           companyName: '',
           address: {
             street: '',

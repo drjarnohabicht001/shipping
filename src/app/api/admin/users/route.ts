@@ -13,6 +13,23 @@ import {
   validateAdminUser,
 } from "@/lib/firestore-schema";
 
+function getAppBaseUrl(request: NextRequest) {
+  const configuredBaseUrl =
+    process.env.APP_BASE_URL?.trim() || process.env.NEXT_PUBLIC_APP_URL?.trim();
+
+  if (configuredBaseUrl) {
+    return configuredBaseUrl.replace(/\/+$/, "");
+  }
+
+  return request.nextUrl.origin;
+}
+
+function getPasswordResetContinueUrl(request: NextRequest, email: string) {
+  const continueUrl = new URL("/admin/login", getAppBaseUrl(request));
+  continueUrl.searchParams.set("email", email);
+  return continueUrl.toString();
+}
+
 export async function GET() {
   try {
     await requireAdminPermission(AdminResource.USERS, AdminAction.READ);
@@ -114,7 +131,10 @@ export async function POST(request: NextRequest) {
       .doc(userRecord.uid)
       .set(newAdminUser);
 
-    const resetLink = await getFirebaseAdminAuth().generatePasswordResetLink(body.email);
+    const resetLink = await getFirebaseAdminAuth().generatePasswordResetLink(body.email, {
+      url: getPasswordResetContinueUrl(request, body.email),
+      handleCodeInApp: false,
+    });
 
     await getFirebaseAdminDb()
       .collection(FIRESTORE_COLLECTIONS.ADMIN_AUDIT_LOGS)

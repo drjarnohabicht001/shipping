@@ -15,8 +15,6 @@ export interface TrackingNumber {
   };
   recipient: {
     name: string;
-    email: string;
-    phone?: string;
     address: string;
   };
   status: TrackingStatus;
@@ -81,8 +79,6 @@ export interface GenerateTrackingRequest {
   };
   recipient: {
     name: string;
-    email: string;
-    phone?: string;
     address: string;
   };
   priority: 'low' | 'medium' | 'high' | 'urgent';

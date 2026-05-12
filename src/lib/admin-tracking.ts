@@ -45,8 +45,6 @@ export interface AdminCreateTrackingRequest {
   };
   recipient: {
     name: string;
-    email: string;
-    phone?: string;
     address: {
       street: string;
       city: string;
@@ -312,6 +310,11 @@ export async function createTrackingItem(
   request: AdminCreateTrackingRequest,
   createdBy: string
 ) {
+  const recipient = removeUndefinedValues({
+    name: request.recipient.name,
+    address: request.recipient.address,
+    companyName: request.recipient.companyName,
+  });
   const trackingId = await generateTrackingId();
   const now = Timestamp.now();
   const nowForTracking = asTrackingTimestamp(now);
@@ -336,7 +339,7 @@ export async function createTrackingItem(
     weight: request.weight,
     dimensions: request.dimensions,
     sender: request.sender,
-    recipient: request.recipient,
+    recipient,
     serviceType: request.serviceType,
     priority: request.priority,
     status: TrackingStatus.PENDING,
