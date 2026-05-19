@@ -3,6 +3,7 @@ import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import JsBarcode from 'jsbarcode';
 import { FirestoreTrackingItem } from '@/lib/firestore-schema';
+import { formatTrackingDate, toDateValue } from '@/lib/tracking-date';
 
 export const generateReceiptPDF = async (tracking: FirestoreTrackingItem) => {
     const doc = new jsPDF();
@@ -12,8 +13,16 @@ export const generateReceiptPDF = async (tracking: FirestoreTrackingItem) => {
     const secondaryColor = '#ff6200'; // FedEx Orange-ish
     const date = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase();
     const deliveryDate = tracking.estimatedDeliveryDate
-        ? new Date(tracking.estimatedDeliveryDate.seconds * 1000).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase()
+        ? formatTrackingDate(
+            tracking.estimatedDeliveryDate,
+            { day: '2-digit', month: 'short', year: 'numeric' },
+            'en-GB'
+          ).toUpperCase()
         : 'PENDING';
+    const createdDate = toDateValue(tracking.createdAt);
+    const departureDate = createdDate
+        ? createdDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase()
+        : date;
 
     // --- Header ---
     // Logo
@@ -68,7 +77,7 @@ export const generateReceiptPDF = async (tracking: FirestoreTrackingItem) => {
     doc.setFontSize(8);
     doc.text('DEPARTURE DATE', 15, startY + 55);
     doc.setFontSize(10);
-    doc.text(date, 95, startY + 55, { align: 'right' });
+    doc.text(departureDate, 95, startY + 55, { align: 'right' });
 
     // Right Column (To)
     const rightX = 115;

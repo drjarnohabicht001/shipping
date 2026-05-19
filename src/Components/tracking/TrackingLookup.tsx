@@ -4,9 +4,12 @@ import React, { useState } from 'react';
 import { Search, Package, MapPin, Clock, CheckCircle, AlertCircle, Truck, Calendar } from 'lucide-react';
 import { useTrackingUpdates } from '@/hooks/useTrackingUpdates';
 import { TrackingStatus } from '@/lib/firestore-schema';
-import { useAuth } from '@/contexts/AuthContext';
 import ShipmentProgress from './ShipmentProgress';
 import LiveMap from './LiveMap';
+import {
+  formatTrackingDateTime,
+  toTimestampMillis,
+} from '@/lib/tracking-date';
 
 interface TrackingLookupProps {
   className?: string;
@@ -62,51 +65,6 @@ const TrackingLookup: React.FC<TrackingLookupProps> = ({ className = '' }) => {
     return status.split('_').map(word => 
       word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
     ).join(' ');
-  };
-
-  const formatDate = (timestamp: any) => {
-    if (!timestamp) return 'N/A';
-    
-    try {
-      let date: Date;
-      
-      // Handle Firestore Timestamp
-      if (timestamp && typeof timestamp.toDate === 'function') {
-        date = timestamp.toDate();
-      } 
-      // Handle Firestore Timestamp with seconds/nanoseconds
-      else if (timestamp && typeof timestamp.seconds === 'number') {
-        date = new Date(timestamp.seconds * 1000);
-      }
-      // Handle Date object
-      else if (timestamp instanceof Date) {
-        date = timestamp;
-      }
-      // Handle string or number
-      else if (typeof timestamp === 'string' || typeof timestamp === 'number') {
-        date = new Date(timestamp);
-      }
-      // Fallback
-      else {
-        return 'N/A';
-      }
-      
-      // Check if date is valid
-      if (isNaN(date.getTime())) {
-        return 'N/A';
-      }
-      
-      return date.toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-      });
-    } catch (error) {
-      console.error('Error formatting date:', error, timestamp);
-      return 'N/A';
-    }
   };
 
   return (
@@ -223,13 +181,29 @@ const TrackingLookup: React.FC<TrackingLookupProps> = ({ className = '' }) => {
                 <div className="flex items-center gap-2">
                   <Clock className="w-4 h-4 text-gray-500" />
                   <span className="text-blue-600 font-medium">Estimated Delivery:</span>
-                  <span className="font-medium text-gray-900">{formatDate(trackingItem.estimatedDeliveryDate)}</span>
+                  <span className="font-medium text-gray-900">
+                    {formatTrackingDateTime(trackingItem.estimatedDeliveryDate, {
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    }, 'en-US')}
+                  </span>
                 </div>
                 {trackingItem.actualDeliveryDate && (
                   <div className="flex items-center gap-2">
                     <CheckCircle className="w-4 h-4 text-green-500" />
                     <span className="text-gray-600">Delivered:</span>
-                    <span className="font-medium text-gray-900">{formatDate(trackingItem.actualDeliveryDate)}</span>
+                    <span className="font-medium text-gray-900">
+                      {formatTrackingDateTime(trackingItem.actualDeliveryDate, {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      }, 'en-US')}
+                    </span>
                   </div>
                 )}
               </div>
@@ -272,8 +246,8 @@ const TrackingLookup: React.FC<TrackingLookupProps> = ({ className = '' }) => {
               {trackingItem.statusHistory
                 .filter(update => update.isPublic)
                 .sort((a, b) => {
-                  const timeA = a.timestamp && typeof a.timestamp.toDate === 'function' ? a.timestamp.toDate().getTime() : new Date(a.timestamp as any).getTime();
-                  const timeB = b.timestamp && typeof b.timestamp.toDate === 'function' ? b.timestamp.toDate().getTime() : new Date(b.timestamp as any).getTime();
+                  const timeA = toTimestampMillis(a.timestamp) ?? 0;
+                  const timeB = toTimestampMillis(b.timestamp) ?? 0;
                   return timeB - timeA;
                 })
                 .map((update, index) => (
@@ -284,7 +258,15 @@ const TrackingLookup: React.FC<TrackingLookupProps> = ({ className = '' }) => {
                     <div className="flex-1">
                       <div className="flex items-center justify-between mb-1">
                         <h4 className="font-medium text-gray-900">{formatStatus(update.status)}</h4>
-                        <span className="text-sm text-gray-500">{formatDate(update.timestamp)}</span>
+                        <span className="text-sm text-gray-500">
+                          {formatTrackingDateTime(update.timestamp, {
+                            year: 'numeric',
+                            month: 'long',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          }, 'en-US')}
+                        </span>
                       </div>
                       <p className="text-sm text-gray-600">{update.description}</p>
                       {update.location && (

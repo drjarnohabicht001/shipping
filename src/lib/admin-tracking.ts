@@ -7,6 +7,7 @@ import {
   TrackingStatus,
   TrackingStatusUpdate,
 } from "@/lib/firestore-schema";
+import { parseTrackingInputDateValue } from "@/lib/tracking-date";
 
 function asTrackingTimestamp(value: Timestamp) {
   return value as unknown as FirestoreTrackingItem["createdAt"];
@@ -406,6 +407,9 @@ export async function updateTrackingStatus(request: AdminUpdateTrackingStatusReq
   const cleanedHistory = (trackingItem.statusHistory || []).map((entry) =>
     removeUndefinedValues(entry)
   );
+  const parsedEstimatedDeliveryDate = request.estimatedDeliveryDate
+    ? parseTrackingInputDateValue(String(request.estimatedDeliveryDate))
+    : null;
   const updateData = removeUndefinedValues({
     status: request.status,
     updatedAt: nowForTracking,
@@ -421,8 +425,8 @@ export async function updateTrackingStatus(request: AdminUpdateTrackingStatusReq
       request.status === TrackingStatus.DELIVERED ? nowForTracking : undefined,
     pickedUpAt:
       request.status === TrackingStatus.PICKED_UP ? nowForTracking : undefined,
-    estimatedDeliveryDate: request.estimatedDeliveryDate
-      ? (Timestamp.fromDate(new Date(request.estimatedDeliveryDate)) as unknown as FirestoreTrackingItem["estimatedDeliveryDate"])
+    estimatedDeliveryDate: parsedEstimatedDeliveryDate
+      ? (Timestamp.fromDate(parsedEstimatedDeliveryDate) as unknown as FirestoreTrackingItem["estimatedDeliveryDate"])
       : undefined,
   }) as Partial<FirestoreTrackingItem>;
 

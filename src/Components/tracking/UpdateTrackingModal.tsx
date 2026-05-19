@@ -3,7 +3,10 @@
 import React, { useState, useEffect } from "react";
 import { X, Package, MapPin, Save, AlertCircle, Calendar } from "lucide-react";
 import { TrackingStatus, FirestoreTrackingItem } from "@/lib/firestore-schema";
-import { Timestamp } from "firebase/firestore";
+import {
+  formatTrackingInputDate,
+  parseTrackingInputDateValue,
+} from "@/lib/tracking-date";
 
 interface UpdateTrackingModalProps {
   isOpen: boolean;
@@ -59,29 +62,7 @@ const UpdateTrackingModal: React.FC<UpdateTrackingModalProps> = ({
 
   useEffect(() => {
     if (tracking) {
-      let estimatedDate = "";
-      if (tracking.estimatedDeliveryDate) {
-        let date: Date;
-        const raw = tracking.estimatedDeliveryDate as any;
-        if (typeof raw.toDate === "function") {
-          // Firestore Timestamp instance
-          date = raw.toDate();
-        } else if (raw instanceof Date) {
-          date = raw;
-        } else if (
-          raw &&
-          typeof raw === "object" &&
-          typeof raw.seconds === "number"
-        ) {
-          // Serialized Firestore Timestamp plain object: { seconds, nanoseconds }
-          date = new Date(raw.seconds * 1000);
-        } else {
-          date = new Date(raw);
-        }
-        if (!isNaN(date.getTime())) {
-          estimatedDate = date.toISOString().split("T")[0];
-        }
-      }
+      const estimatedDate = formatTrackingInputDate(tracking.estimatedDeliveryDate);
 
       setFormData({
         status: tracking.status,
@@ -161,8 +142,8 @@ const UpdateTrackingModal: React.FC<UpdateTrackingModalProps> = ({
       // Handle estimated delivery date
       let estimatedDeliveryDate: Date | undefined = undefined;
       if (formData.updateEstimatedDelivery && formData.estimatedDeliveryDate) {
-        estimatedDeliveryDate = new Date(formData.estimatedDeliveryDate);
-        if (isNaN(estimatedDeliveryDate.getTime())) {
+        estimatedDeliveryDate = parseTrackingInputDateValue(formData.estimatedDeliveryDate) ?? undefined;
+        if (!estimatedDeliveryDate) {
           alert("Please provide a valid estimated delivery date");
           setLoading(false);
           return;

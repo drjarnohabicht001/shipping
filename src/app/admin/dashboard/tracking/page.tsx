@@ -8,6 +8,7 @@ import { FirestoreTrackingItem, TrackingStatus } from '@/lib/firestore-schema';
 import CreateTrackingModal from '@/Components/tracking/CreateTrackingModal';
 import UpdateTrackingModal from '@/Components/tracking/UpdateTrackingModal';
 import { generateReceiptPDF } from '@/utils/pdfGenerator';
+import { formatTrackingDate } from '@/lib/tracking-date';
 import { FileText } from 'lucide-react';
 
 interface TrackingStats {
@@ -51,46 +52,6 @@ export default function AdminTrackingDashboard() {
   const [selectedTracking, setSelectedTracking] = useState<FirestoreTrackingItem | null>(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
-
-  const formatCreatedDate = (timestamp: unknown) => {
-    if (!timestamp) return 'N/A';
-
-    try {
-      let date: Date | null = null;
-
-      if (
-        typeof timestamp === 'object' &&
-        timestamp !== null &&
-        'toDate' in timestamp &&
-        typeof (timestamp as { toDate?: unknown }).toDate === 'function'
-      ) {
-        date = (timestamp as { toDate: () => Date }).toDate();
-      } else if (
-        typeof timestamp === 'object' &&
-        timestamp !== null &&
-        'seconds' in timestamp &&
-        typeof (timestamp as { seconds?: unknown }).seconds === 'number'
-      ) {
-        date = new Date((timestamp as { seconds: number }).seconds * 1000);
-      } else if (
-        typeof timestamp === 'object' &&
-        timestamp !== null &&
-        '_seconds' in timestamp &&
-        typeof (timestamp as { _seconds?: unknown })._seconds === 'number'
-      ) {
-        date = new Date((timestamp as { _seconds: number })._seconds * 1000);
-      } else if (timestamp instanceof Date) {
-        date = timestamp;
-      } else if (typeof timestamp === 'string' || typeof timestamp === 'number') {
-        date = new Date(timestamp);
-      }
-
-      return date && !Number.isNaN(date.getTime()) ? date.toLocaleDateString() : 'N/A';
-    } catch (error) {
-      console.error('Error formatting created date:', error, timestamp);
-      return 'N/A';
-    }
-  };
 
   useEffect(() => {
     loadTrackings();
@@ -399,7 +360,7 @@ export default function AdminTrackingDashboard() {
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {formatCreatedDate(tracking.createdAt)}
+                      {formatTrackingDate(tracking.createdAt)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <div className="flex items-center gap-2">

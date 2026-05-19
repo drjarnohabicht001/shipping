@@ -9,6 +9,12 @@ import { auditService } from "@/services/auditService";
 import { FirestoreTrackingItem, TrackingStatus } from "@/lib/firestore-schema";
 import UpdateTrackingModal from "@/Components/tracking/UpdateTrackingModal";
 import {
+  formatTrackingDate,
+  formatTrackingDateTime,
+  toDateValue,
+  toTimestampMillis,
+} from "@/lib/tracking-date";
+import {
   ArrowLeft,
   Package,
   MapPin,
@@ -117,84 +123,6 @@ const TrackingDetails = () => {
     }
   };
 
-  const formatDate = (timestamp: any) => {
-    if (!timestamp) return "N/A";
-
-    try {
-      let date: Date;
-
-      // Handle Firestore Timestamp
-      if (timestamp && typeof timestamp.toDate === "function") {
-        date = timestamp.toDate();
-      }
-      // Handle Firestore Timestamp with seconds/nanoseconds
-      else if (timestamp && typeof timestamp.seconds === "number") {
-        date = new Date(timestamp.seconds * 1000);
-      }
-      // Handle Date object
-      else if (timestamp instanceof Date) {
-        date = timestamp;
-      }
-      // Handle string or number
-      else if (typeof timestamp === "string" || typeof timestamp === "number") {
-        date = new Date(timestamp);
-      }
-      // Fallback
-      else {
-        return "N/A";
-      }
-
-      // Check if date is valid
-      if (isNaN(date.getTime())) {
-        return "N/A";
-      }
-
-      return date.toLocaleDateString();
-    } catch (error) {
-      console.error("Error formatting date:", error, timestamp);
-      return "N/A";
-    }
-  };
-
-  const formatDateTime = (timestamp: any) => {
-    if (!timestamp) return "N/A";
-
-    try {
-      let date: Date;
-
-      // Handle Firestore Timestamp
-      if (timestamp && typeof timestamp.toDate === "function") {
-        date = timestamp.toDate();
-      }
-      // Handle Firestore Timestamp with seconds/nanoseconds
-      else if (timestamp && typeof timestamp.seconds === "number") {
-        date = new Date(timestamp.seconds * 1000);
-      }
-      // Handle Date object
-      else if (timestamp instanceof Date) {
-        date = timestamp;
-      }
-      // Handle string or number
-      else if (typeof timestamp === "string" || typeof timestamp === "number") {
-        date = new Date(timestamp);
-      }
-      // Fallback
-      else {
-        return "N/A";
-      }
-
-      // Check if date is valid
-      if (isNaN(date.getTime())) {
-        return "N/A";
-      }
-
-      return date.toLocaleString();
-    } catch (error) {
-      console.error("Error formatting date:", error, timestamp);
-      return "N/A";
-    }
-  };
-
   const getStatusIcon = (status: TrackingStatus) => {
     switch (status) {
       case TrackingStatus.PENDING:
@@ -252,10 +180,7 @@ const TrackingDetails = () => {
     const csvContent = [
       ["Timestamp", "Status", "Location", "Description", "Notes", "Updated By"],
       ...tracking.statusHistory.map((h) => {
-        const timestamp =
-          h.timestamp && typeof h.timestamp.toDate === "function"
-            ? h.timestamp.toDate().toISOString()
-            : new Date(h.timestamp as any).toISOString();
+        const timestamp = toDateValue(h.timestamp)?.toISOString() ?? "N/A";
         const location = h.location
           ? `${h.location.city}, ${h.location.country}${h.location.facility ? ` - ${h.location.facility}` : ""}`
           : "";
@@ -388,7 +313,7 @@ const TrackingDetails = () => {
               Created Date
             </label>
             <p className="text-sm text-gray-900">
-              {formatDate(tracking.createdAt)}
+              {formatTrackingDate(tracking.createdAt)}
             </p>
           </div>
         </div>
@@ -455,7 +380,7 @@ const TrackingDetails = () => {
               Estimated Delivery
             </label>
             <p className="text-sm text-gray-900">
-              {formatDate(tracking.estimatedDeliveryDate)}
+              {formatTrackingDate(tracking.estimatedDeliveryDate)}
             </p>
           </div>
         )}
@@ -487,14 +412,8 @@ const TrackingDetails = () => {
             <div className="space-y-4">
               {tracking.statusHistory
                 .sort((a, b) => {
-                  const timeA =
-                    a.timestamp && typeof a.timestamp.toDate === "function"
-                      ? a.timestamp.toDate().getTime()
-                      : new Date(a.timestamp as any).getTime();
-                  const timeB =
-                    b.timestamp && typeof b.timestamp.toDate === "function"
-                      ? b.timestamp.toDate().getTime()
-                      : new Date(b.timestamp as any).getTime();
+                  const timeA = toTimestampMillis(a.timestamp) ?? 0;
+                  const timeB = toTimestampMillis(b.timestamp) ?? 0;
                   return timeB - timeA;
                 })
                 .map((entry, index) => (
@@ -528,7 +447,7 @@ const TrackingDetails = () => {
                         </div>
                         <div className="flex items-center text-sm text-gray-500">
                           <Calendar className="h-3 w-3 mr-1" />
-                          {formatDateTime(entry.timestamp)}
+                          {formatTrackingDateTime(entry.timestamp)}
                         </div>
                       </div>
 
