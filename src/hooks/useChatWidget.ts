@@ -1,11 +1,19 @@
 import { useState, useEffect, useCallback } from 'react';
 import { onAuthStateChanged, signInAnonymously } from 'firebase/auth';
 import FirestoreChatService from '@/services/firestoreChatService';
-import { FirestoreChatMessage, FirestoreChatConversation } from '@/lib/firestore-schema';
+import { FirestoreChatMessage } from '@/lib/firestore-schema';
 import { auth } from '@/lib/firebase';
 
 const USER_NAME_KEY = 'chat_user_name';
 const USER_EMAIL_KEY = 'chat_user_email';
+const CHAT_UNAVAILABLE_MESSAGE = 'Chat is temporarily unavailable right now.';
+
+function isAnonymousAuthDisabled(error: unknown) {
+    return typeof error === 'object' &&
+        error !== null &&
+        'code' in error &&
+        error.code === 'auth/admin-restricted-operation';
+}
 
 export interface UseChatWidgetResult {
     isOpen: boolean;
@@ -29,6 +37,7 @@ export const useChatWidget = (): UseChatWidgetResult => {
     const [userName, setUserName] = useState<string | null>(null);
     const [userEmail, setUserEmail] = useState<string | null>(null);
     const [unreadCount, setUnreadCount] = useState(0);
+    const [chatUnavailable, setChatUnavailable] = useState(false);
 
     const chatService = FirestoreChatService.getInstance();
 
@@ -36,6 +45,7 @@ export const useChatWidget = (): UseChatWidgetResult => {
         const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
             try {
                 const currentUser = firebaseUser ?? (await signInAnonymously(auth)).user;
+                setChatUnavailable(false);
                 setParticipantUid(currentUser.uid);
 
                 if (typeof window !== 'undefined') {
@@ -53,6 +63,13 @@ export const useChatWidget = (): UseChatWidgetResult => {
 
                 await loadConversation(currentUser.uid);
             } catch (err) {
+                if (isAnonymousAuthDisabled(err)) {
+                    setChatUnavailable(true);
+                    setParticipantUid(null);
+                    setError(CHAT_UNAVAILABLE_MESSAGE);
+                    return;
+                }
+
                 console.error('Error preparing chat identity:', err);
                 setError('Unable to initialize secure chat right now.');
             }
@@ -120,6 +137,11 @@ export const useChatWidget = (): UseChatWidgetResult => {
 
     // Initialize chat for new user
     const initializeChat = useCallback(async (name: string, email: string, initialMessage: string) => {
+        if (chatUnavailable || !participantUid) {
+            setError(CHAT_UNAVAILABLE_MESSAGE);
+            throw new Error(CHAT_UNAVAILABLE_MESSAGE);
+        }
+
         try {
             setIsLoading(true);
             setError(null);
@@ -147,10 +169,15 @@ export const useChatWidget = (): UseChatWidgetResult => {
         } finally {
             setIsLoading(false);
         }
-    }, [participantUid]);
+    }, [chatUnavailable, participantUid]);
 
     // Send message
     const sendMessage = useCallback(async (text: string) => {
+        if (chatUnavailable) {
+            setError(CHAT_UNAVAILABLE_MESSAGE);
+            throw new Error(CHAT_UNAVAILABLE_MESSAGE);
+        }
+
         if (!conversationId || !participantUid || !userName) {
             setError('Chat not initialized');
             return;
@@ -170,7 +197,7 @@ export const useChatWidget = (): UseChatWidgetResult => {
             setError('Failed to send message. Please try again.');
             throw err;
         }
-    }, [conversationId, participantUid, userName]);
+    }, [chatUnavailable, conversationId, participantUid, userName]);
 
     return {
         isOpen,

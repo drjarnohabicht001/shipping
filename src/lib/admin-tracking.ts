@@ -307,6 +307,35 @@ export async function getTrackingItemByTrackingId(trackingId: string) {
   } as FirestoreTrackingItem;
 }
 
+export async function getPublicTrackingItemByTrackingId(trackingId: string) {
+  const publicSnapshot = await getFirebaseAdminDb()
+    .collection(FIRESTORE_COLLECTIONS.PUBLIC_TRACKING_ITEMS)
+    .where("trackingId", "==", trackingId)
+    .limit(1)
+    .get();
+
+  if (!publicSnapshot.empty) {
+    const itemDoc = publicSnapshot.docs[0];
+    return {
+      id: itemDoc.id,
+      ...itemDoc.data(),
+    } as PublicTrackingItem;
+  }
+
+  const privateItem = await getTrackingItemByTrackingId(trackingId);
+
+  if (!privateItem) {
+    return null;
+  }
+
+  await writePublicTrackingProjection(privateItem);
+
+  return {
+    id: privateItem.id,
+    ...mapPublicTrackingItem(privateItem),
+  } as PublicTrackingItem;
+}
+
 export async function createTrackingItem(
   request: AdminCreateTrackingRequest,
   createdBy: string

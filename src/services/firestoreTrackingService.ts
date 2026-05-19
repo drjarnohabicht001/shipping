@@ -326,23 +326,18 @@ class FirestoreTrackingService {
 
   async getPublicTrackingByTrackingId(trackingId: string): Promise<PublicTrackingItem | null> {
     try {
-      const q = query(
-        collection(db, FIRESTORE_COLLECTIONS.PUBLIC_TRACKING_ITEMS),
-        where('trackingId', '==', trackingId),
-        limit(1)
-      );
+      const response = await fetch(`/api/tracking/${encodeURIComponent(trackingId)}`);
+      const data = await response.json().catch(() => ({}));
 
-      const querySnapshot = await getDocs(q);
-
-      if (querySnapshot.empty) {
+      if (response.status === 404) {
         return null;
       }
 
-      const itemDoc = querySnapshot.docs[0];
-      return {
-        id: itemDoc.id,
-        ...itemDoc.data()
-      } as PublicTrackingItem;
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to retrieve tracking information');
+      }
+
+      return data.item as PublicTrackingItem;
     } catch (error) {
       console.error('Error getting public tracking item:', error);
       throw new Error('Failed to retrieve tracking information');
@@ -483,27 +478,31 @@ class FirestoreTrackingService {
     trackingId: string,
     callback: (trackingItem: PublicTrackingItem | null) => void
   ): () => void {
-    const q = query(
-      collection(db, FIRESTORE_COLLECTIONS.PUBLIC_TRACKING_ITEMS),
-      where('trackingId', '==', trackingId),
-      limit(1)
-    );
+    let isActive = true;
 
-    return onSnapshot(q, (querySnapshot) => {
-      if (querySnapshot.empty) {
-        callback(null);
-        return;
+    const fetchLatest = async () => {
+      try {
+        const item = await this.getPublicTrackingByTrackingId(trackingId);
+        if (isActive) {
+          callback(item);
+        }
+      } catch (error) {
+        console.error('Error loading public tracking item:', error);
+        if (isActive) {
+          callback(null);
+        }
       }
+    };
 
-      const itemDoc = querySnapshot.docs[0];
-      callback({
-        id: itemDoc.id,
-        ...itemDoc.data()
-      } as PublicTrackingItem);
-    }, (error) => {
-      console.error('Error in public tracking subscription:', error);
-      callback(null);
-    });
+    void fetchLatest();
+    const intervalId = window.setInterval(() => {
+      void fetchLatest();
+    }, 30000);
+
+    return () => {
+      isActive = false;
+      window.clearInterval(intervalId);
+    };
   }
 
   /**
