@@ -4,7 +4,7 @@ export default function MaintenancePage() {
   return (
     <div className="min-h-screen bg-[#2E3135] flex flex-col items-center justify-center px-6 text-white">
       {/* Logo */}
-      <div className="mb-10">
+      {/* <div className="mb-10">
         <Image
           src="/img/logo.png"
           alt="Logo"
@@ -12,7 +12,7 @@ export default function MaintenancePage() {
           height={60}
           priority
         />
-      </div>
+      </div> */}
 
       {/* Icon */}
       <div className="mb-8 opacity-60">
