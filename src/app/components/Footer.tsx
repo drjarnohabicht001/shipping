@@ -61,7 +61,7 @@ export default function Footer() {
                         <address className="not-italic text-gray-300 space-y-2">
                             <p>72 Princes Street, Romaldkirk, United Kingdom</p>
                             <p>Email: Support@globalbridgelogistics.eu</p>
-                            <p>Phone: (+44) 7511-608235</p>
+                            <p>Phone: (+44) 7342-160308</p>
                             {/* <p>Fax: (123) 456-7891</p> */}
                         </address>
                         <div className="pt-2">
