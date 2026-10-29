@@ -1,18 +1,55 @@
-import { useState, useEffect, useCallback } from 'react';
-import { onAuthStateChanged, signInAnonymously } from 'firebase/auth';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
 import FirestoreChatService from '@/services/firestoreChatService';
 import { FirestoreChatMessage } from '@/lib/firestore-schema';
-import { auth } from '@/lib/firebase';
+import { chatAuth, chatDb } from '@/lib/firebase-chat';
 
 const USER_NAME_KEY = 'chat_user_name';
 const USER_EMAIL_KEY = 'chat_user_email';
+const CLIENT_ID_KEY = 'chat_client_id';
 const CHAT_UNAVAILABLE_MESSAGE = 'Chat is temporarily unavailable right now.';
 
-function isAnonymousAuthDisabled(error: unknown) {
+function isAuthUnavailable(error: unknown) {
     return typeof error === 'object' &&
         error !== null &&
         'code' in error &&
         error.code === 'auth/admin-restricted-operation';
+}
+
+function getClientId(): string {
+    const stored = localStorage.getItem(CLIENT_ID_KEY);
+    if (stored) return stored;
+
+    const generated =
+        typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+            ? crypto.randomUUID()
+            : `${Date.now().toString(16)}-${Math.random().toString(16).slice(2, 10)}`;
+    localStorage.setItem(CLIENT_ID_KEY, generated);
+    return generated;
+}
+
+/**
+ * Swap the browser's random chat client id for a Firebase session token.
+ * Anonymous sign-in is disabled on the project, so identity is issued
+ * server-side and the visitor never has to sign up.
+ */
+async function signInForChat() {
+    const response = await fetch('/api/chat/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId: getClientId() }),
+    });
+
+    if (!response.ok) {
+        throw new Error('Unable to start chat right now.');
+    }
+
+    const { token } = (await response.json()) as { token?: string };
+    if (!token) {
+        throw new Error('Unable to start chat right now.');
+    }
+
+    return signInWithCustomToken(chatAuth, token);
 }
 
 export interface UseChatWidgetResult {
@@ -39,14 +76,39 @@ export const useChatWidget = (): UseChatWidgetResult => {
     const [unreadCount, setUnreadCount] = useState(0);
     const [chatUnavailable, setChatUnavailable] = useState(false);
 
-    const chatService = FirestoreChatService.getInstance();
+    const chatService = FirestoreChatService.getInstance(chatDb);
+    const signInStartedRef = useRef(false);
 
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+        const unsubscribe = onAuthStateChanged(chatAuth, async (firebaseUser) => {
+            if (!firebaseUser) {
+                // Signing in fires this listener again with the new user.
+                if (signInStartedRef.current) return;
+                signInStartedRef.current = true;
+
+                try {
+                    await signInForChat();
+                } catch (err) {
+                    signInStartedRef.current = false;
+
+                    if (isAuthUnavailable(err)) {
+                        setChatUnavailable(true);
+                        setParticipantUid(null);
+                        setError(CHAT_UNAVAILABLE_MESSAGE);
+                        return;
+                    }
+
+                    console.error('Error preparing chat identity:', err);
+                    setError('Unable to initialize secure chat right now.');
+                }
+                return;
+            }
+
+            signInStartedRef.current = false;
+
             try {
-                const currentUser = firebaseUser ?? (await signInAnonymously(auth)).user;
                 setChatUnavailable(false);
-                setParticipantUid(currentUser.uid);
+                setParticipantUid(firebaseUser.uid);
 
                 if (typeof window !== 'undefined') {
                     const storedUserName = localStorage.getItem(USER_NAME_KEY);
@@ -61,15 +123,8 @@ export const useChatWidget = (): UseChatWidgetResult => {
                     }
                 }
 
-                await loadConversation(currentUser.uid);
+                await loadConversation(firebaseUser.uid);
             } catch (err) {
-                if (isAnonymousAuthDisabled(err)) {
-                    setChatUnavailable(true);
-                    setParticipantUid(null);
-                    setError(CHAT_UNAVAILABLE_MESSAGE);
-                    return;
-                }
-
                 console.error('Error preparing chat identity:', err);
                 setError('Unable to initialize secure chat right now.');
             }

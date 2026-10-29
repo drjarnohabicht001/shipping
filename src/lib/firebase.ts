@@ -2,7 +2,7 @@ import { initializeApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
 import { browserLocalPersistence, getAuth, setPersistence } from 'firebase/auth';
 
-const firebaseConfig = {
+export const firebaseConfig = {
   apiKey:
     process.env.NEXT_PUBLIC_FIREBASE_API_KEY ??
     "AIzaSyAWOZ0IO4nmPOPj_-wt-CC8JIwz3yX9_NI",

@@ -12,7 +12,8 @@ import {
     onSnapshot,
     Timestamp,
     increment,
-    writeBatch
+    writeBatch,
+    Firestore
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import {
@@ -36,17 +37,42 @@ export interface SendMessageRequest {
     senderId: string;
 }
 
+function timestampToMillis(value: unknown): number {
+    if (!value) return 0;
+    if (value instanceof Date) return value.getTime();
+    if (typeof value === 'object' && value !== null) {
+        const candidate = value as { toMillis?: () => number; seconds?: number };
+        if (typeof candidate.toMillis === 'function') return candidate.toMillis();
+        if (typeof candidate.seconds === 'number') return candidate.seconds * 1000;
+    }
+    return 0;
+}
+
+/**
+ * Message queries stay equality-only so they never depend on a composite
+ * index being deployed; ordering happens here instead.
+ */
+function sortMessages(messages: FirestoreChatMessage[]): FirestoreChatMessage[] {
+    return messages.sort(
+        (a, b) => timestampToMillis(a.timestamp) - timestampToMillis(b.timestamp)
+    );
+}
+
 class FirestoreChatService {
-    private static instance: FirestoreChatService;
+    private static instances = new WeakMap<Firestore, FirestoreChatService>();
     private chatCounterDoc = 'chat_counter';
 
-    private constructor() { }
+    private constructor(private readonly db: Firestore) { }
 
-    public static getInstance(): FirestoreChatService {
-        if (!FirestoreChatService.instance) {
-            FirestoreChatService.instance = new FirestoreChatService();
+    public static getInstance(firestore: Firestore = db): FirestoreChatService {
+        let instance = FirestoreChatService.instances.get(firestore);
+
+        if (!instance) {
+            instance = new FirestoreChatService(firestore);
+            FirestoreChatService.instances.set(firestore, instance);
         }
-        return FirestoreChatService.instance;
+
+        return instance;
     }
 
     /**
@@ -63,7 +89,7 @@ class FirestoreChatService {
      */
     private async generateConversationId(): Promise<string> {
         const year = new Date().getFullYear();
-        const counterRef = doc(db, 'system_counters', this.chatCounterDoc);
+        const counterRef = doc(this.db, 'system_counters', this.chatCounterDoc);
 
         try {
             const counterDoc = await getDoc(counterRef);
@@ -94,7 +120,7 @@ class FirestoreChatService {
     async getConversationByParticipantUid(participantUid: string): Promise<FirestoreChatConversation | null> {
         try {
             const q = query(
-                collection(db, FIRESTORE_COLLECTIONS.CHAT_CONVERSATIONS),
+                collection(this.db, FIRESTORE_COLLECTIONS.CHAT_CONVERSATIONS),
                 where('participantUid', '==', participantUid),
                 limit(1)
             );
@@ -149,7 +175,7 @@ class FirestoreChatService {
             };
 
             const docRef = await addDoc(
-                collection(db, FIRESTORE_COLLECTIONS.CHAT_CONVERSATIONS),
+                collection(this.db, FIRESTORE_COLLECTIONS.CHAT_CONVERSATIONS),
                 conversationData
             );
 
@@ -165,7 +191,7 @@ class FirestoreChatService {
             };
 
             await addDoc(
-                collection(db, FIRESTORE_COLLECTIONS.CHAT_MESSAGES),
+                collection(this.db, FIRESTORE_COLLECTIONS.CHAT_MESSAGES),
                 messageData
             );
 
@@ -201,12 +227,12 @@ class FirestoreChatService {
             };
 
             const docRef = await addDoc(
-                collection(db, FIRESTORE_COLLECTIONS.CHAT_MESSAGES),
+                collection(this.db, FIRESTORE_COLLECTIONS.CHAT_MESSAGES),
                 messageData
             );
 
             // Update conversation's last message and unread count
-            const conversationRef = doc(db, FIRESTORE_COLLECTIONS.CHAT_CONVERSATIONS, request.conversationId);
+            const conversationRef = doc(this.db, FIRESTORE_COLLECTIONS.CHAT_CONVERSATIONS, request.conversationId);
             const updateData: any = {
                 lastMessage: {
                     text: request.text,
@@ -240,9 +266,8 @@ class FirestoreChatService {
     async getMessages(conversationId: string): Promise<FirestoreChatMessage[]> {
         try {
             const q = query(
-                collection(db, FIRESTORE_COLLECTIONS.CHAT_MESSAGES),
-                where('conversationId', '==', conversationId),
-                orderBy('timestamp', 'asc')
+                collection(this.db, FIRESTORE_COLLECTIONS.CHAT_MESSAGES),
+                where('conversationId', '==', conversationId)
             );
 
             const querySnapshot = await getDocs(q);
@@ -255,7 +280,7 @@ class FirestoreChatService {
                 } as FirestoreChatMessage);
             });
 
-            return messages;
+            return sortMessages(messages);
         } catch (error) {
             console.error('Error fetching messages:', error);
             throw error;
@@ -270,9 +295,8 @@ class FirestoreChatService {
         callback: (messages: FirestoreChatMessage[]) => void
     ): () => void {
         const q = query(
-            collection(db, FIRESTORE_COLLECTIONS.CHAT_MESSAGES),
-            where('conversationId', '==', conversationId),
-            orderBy('timestamp', 'asc')
+            collection(this.db, FIRESTORE_COLLECTIONS.CHAT_MESSAGES),
+            where('conversationId', '==', conversationId)
         );
 
         return onSnapshot(q, (querySnapshot) => {
@@ -285,7 +309,7 @@ class FirestoreChatService {
                 } as FirestoreChatMessage);
             });
 
-            callback(messages);
+            callback(sortMessages(messages));
         }, (error) => {
             console.error('Error in messages subscription:', error);
             callback([]);
@@ -298,7 +322,7 @@ class FirestoreChatService {
     async getAllConversations(): Promise<FirestoreChatConversation[]> {
         try {
             const q = query(
-                collection(db, FIRESTORE_COLLECTIONS.CHAT_CONVERSATIONS),
+                collection(this.db, FIRESTORE_COLLECTIONS.CHAT_CONVERSATIONS),
                 orderBy('updatedAt', 'desc')
             );
 
@@ -326,7 +350,7 @@ class FirestoreChatService {
         callback: (conversations: FirestoreChatConversation[]) => void
     ): () => void {
         const q = query(
-            collection(db, FIRESTORE_COLLECTIONS.CHAT_CONVERSATIONS),
+            collection(this.db, FIRESTORE_COLLECTIONS.CHAT_CONVERSATIONS),
             orderBy('updatedAt', 'desc')
         );
 
@@ -352,11 +376,11 @@ class FirestoreChatService {
      */
     async markMessagesAsRead(conversationId: string, readBy: 'user' | 'admin'): Promise<void> {
         try {
-            const batch = writeBatch(db);
+            const batch = writeBatch(this.db);
 
             // Get all unread messages
             const q = query(
-                collection(db, FIRESTORE_COLLECTIONS.CHAT_MESSAGES),
+                collection(this.db, FIRESTORE_COLLECTIONS.CHAT_MESSAGES),
                 where('conversationId', '==', conversationId),
                 where('isRead', '==', false),
                 where('sender', '==', readBy === 'admin' ? 'user' : 'admin')
@@ -369,7 +393,7 @@ class FirestoreChatService {
             });
 
             // Reset unread count in conversation
-            const conversationRef = doc(db, FIRESTORE_COLLECTIONS.CHAT_CONVERSATIONS, conversationId);
+            const conversationRef = doc(this.db, FIRESTORE_COLLECTIONS.CHAT_CONVERSATIONS, conversationId);
             const updateData = readBy === 'admin'
                 ? { unreadByAdmin: 0 }
                 : { unreadByUser: 0 };
@@ -391,7 +415,7 @@ class FirestoreChatService {
         status: 'active' | 'resolved' | 'archived'
     ): Promise<void> {
         try {
-            const conversationRef = doc(db, FIRESTORE_COLLECTIONS.CHAT_CONVERSATIONS, conversationId);
+            const conversationRef = doc(this.db, FIRESTORE_COLLECTIONS.CHAT_CONVERSATIONS, conversationId);
             await updateDoc(conversationRef, {
                 status,
                 updatedAt: Timestamp.now()
